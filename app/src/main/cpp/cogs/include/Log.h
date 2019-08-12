@@ -1,5 +1,5 @@
-#ifndef YOGHURT_LOG_H
-#define YOGHURT_LOG_H
+#ifndef EEVIX_LOG_H
+#define EEVIX_LOG_H
 
 #ifndef LOG_TAG
 #define LOG_TAG ""
@@ -28,4 +28,4 @@
 
 #endif
 
-#endif //YOGHURT_LOG_H
+#endif //EEVIX_LOG_H

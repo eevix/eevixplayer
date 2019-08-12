@@ -1,11 +1,11 @@
-#ifndef YOGHURT_QUEUE_H
-#define YOGHURT_QUEUE_H
+#ifndef EEVIX_QUEUE_H
+#define EEVIX_QUEUE_H
 
 #include <vector>
 #include "Mutex.h"
 #include "Condition.h"
 
-namespace yoghurt
+namespace eevix
 {
 template<typename T>
 class Queue
@@ -71,4 +71,4 @@ private:
 };
 
 }
-#endif //YOGHURTMEDIA_QUEUE_H
+#endif //EEVIXMEDIA_QUEUE_H

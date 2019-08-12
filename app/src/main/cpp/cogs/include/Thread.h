@@ -1,12 +1,12 @@
-#ifndef YOGHURT_THREAD_H
-#define YOGHURT_THREAD_H
+#ifndef EEVIX_THREAD_H
+#define EEVIX_THREAD_H
 
 #include <pthread.h>
 #include <string>
 #include "Mutex.h"
 #include "Condition.h"
 
-namespace yoghurt
+namespace eevix
 {
 
 class Thread
@@ -38,4 +38,4 @@ private:
 
 } // namespace eevix
 
-#endif // YOGHURT_THREAD_H
+#endif // EEVIX_THREAD_H

@@ -1,15 +1,11 @@
-//
-// Created by Administrator on 2019/5/18.
-//
-
-#ifndef YOGHURT_KEYEDDATA_H
-#define YOGHURT_KEYEDDATA_H
+#ifndef EEVIX_KEYEDDATA_H
+#define EEVIX_KEYEDDATA_H
 
 #include <stdint.h>
 #include <map>
 #include <string>
 
-namespace yoghurt
+namespace eevix
 {
 
 class KeyedData
@@ -63,4 +59,4 @@ private:
 };
 
 }
-#endif //YOGHURT_KEYEDDATA_H
+#endif //EEVIX_KEYEDDATA_H

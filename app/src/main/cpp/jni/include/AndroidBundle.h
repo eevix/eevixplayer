@@ -1,10 +1,10 @@
-#ifndef ANDROID_BUNDLE_H
-#define ANDROID_BUNDLE_H
+#ifndef EEVIX_ANDROID_BUNDLE_H
+#define EEVIX_ANDROID_BUNDLE_H
 
 #include <jni.h>
 #include "Mutex.h"
 
-namespace yoghurt
+namespace eevix
 {
 
 class AndroidBundle
@@ -34,4 +34,4 @@ private:
 };
 
 }
-#endif //ANDROID_BUNDLE_H
+#endif //EEVIX_ANDROID_BUNDLE_H

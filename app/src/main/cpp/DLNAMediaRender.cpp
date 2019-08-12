@@ -1,7 +1,4 @@
-//
-// Created by Administrator on 2019/4/23.
-//
-#define LOG_TAG "YoghurtMediaRender"
+#define LOG_TAG "EevixMediaRender"
 #include <jni.h>
 #include <Log.h>
 #include <unistd.h>
@@ -12,15 +9,15 @@
 #include "PltUPnP.h"
 #include "PltMediaRenderer.h"
 
-using yoghurt::Thread;
-using yoghurt::Queue;
-using yoghurt::AndroidBundle;
-using yoghurt::KeyedData;
+using eevix::Thread;
+using eevix::Queue;
+using eevix::AndroidBundle;
+using eevix::KeyedData;
 
 static void nativeInit(JNIEnv* env);
 static void nativeSetup(JNIEnv* env, jobject JMediaRender);
 
-static const char *                 gDLNAServiceClassName = "com/eevix/MediaRender";
+static const char *                 gDLNAServiceClassName = "com/eevix/DLNAMediaRender";
 static PLT_DeviceHostReference      gMediaRender;
 static PLT_UPnP                     gUPNPService;
 static JavaVM *                     gJavaVM = NULL;
@@ -438,7 +435,7 @@ jint JNI_OnLoad(JavaVM* vm, void* reserved)
     const JNINativeMethod nativeMethods[] =
     {
             {"nativeInit",   "()V",                            (void*)nativeInit},
-            {"nativeSetup",  "(Lcom/eevix/MediaRender;)V",   (void*)nativeSetup},
+            {"nativeSetup",  "(Lcom/eevix/DLNAMediaRender;)V",   (void*)nativeSetup},
     };
 
     if (vm->GetEnv((void**) &env, JNI_VERSION_1_4) != JNI_OK)
@@ -494,7 +491,7 @@ void nativeSetup(JNIEnv* env, jobject mediaRender)
     YFATAL_IF(gJMediaRender == NULL);
 
     gJOnAction = env->GetMethodID(env->GetObjectClass(mediaRender), "onAction", "(Landroid/os/Bundle;)V");
-    jclass actionsClass = env->FindClass("com/eevix/MediaRender$Actions");
+    jclass actionsClass = env->FindClass("com/eevix/DLNAMediaRender$Actions");
     gJActions.SET_URL = env->GetStaticIntField(actionsClass, env->GetStaticFieldID(actionsClass, "SET_URL", "I"));
     gJActions.PLAY    = env->GetStaticIntField(actionsClass, env->GetStaticFieldID(actionsClass, "PLAY", "I"));
     gJActions.PAUSE   = env->GetStaticIntField(actionsClass, env->GetStaticFieldID(actionsClass, "PAUSE", "I"));

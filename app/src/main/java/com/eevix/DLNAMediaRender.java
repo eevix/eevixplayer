@@ -2,14 +2,16 @@ package com.eevix;
 
 import android.app.Service;
 import android.content.Intent;
+import android.net.Uri;
 import android.os.Bundle;
 import android.os.IBinder;
 import android.util.Log;
 
+import static android.content.Intent.ACTION_VIEW;
 import static android.content.Intent.FLAG_ACTIVITY_NEW_TASK;
 
-public class MediaRender extends Service {
-    private static final String TAG = "MediaRender";
+public class DLNAMediaRender extends Service {
+    private static final String TAG = "DLNAMediaRender";
     private class Actions {
         private static final int SET_URL = 0;
         private static final int PLAY    = 1;
@@ -18,10 +20,10 @@ public class MediaRender extends Service {
         private static final int STOP    = 4;
     }
     private static native void nativeInit();
-    private native void nativeSetup(MediaRender mediaRender);
+    private native void nativeSetup(DLNAMediaRender dlnaMediaRender);
 
     static {
-        System.loadLibrary("yoghurtmediarender");
+        System.loadLibrary("dlnamediarender");
         nativeInit();
     }
 
@@ -51,6 +53,8 @@ public class MediaRender extends Service {
                 Log.d(TAG, "startActivity");
                 Intent intent = new Intent(this, PlaybackActivity.class);
                 intent.setFlags(FLAG_ACTIVITY_NEW_TASK);
+                intent.setAction(ACTION_VIEW);
+                intent.setData(Uri.parse(action.getString("uri")));
                 intent.putExtra("from", this.getClass().getName());
                 startActivity(intent);
                 break;

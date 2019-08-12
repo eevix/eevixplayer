@@ -12,7 +12,7 @@
 #include "KeyedData.h"
 #include "Log.h"
 
-namespace yoghurt
+namespace eevix
 {
 KeyedData::KeyedData()
 {

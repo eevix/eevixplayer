@@ -5,7 +5,7 @@
 #include "Thread.h"
 #include "Log.h"
 
-namespace yoghurt
+namespace eevix
 {
 Thread::Thread():
     mExitPending(false),

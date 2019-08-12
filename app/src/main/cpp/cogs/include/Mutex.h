@@ -1,11 +1,11 @@
-#ifndef YOGHURT_MUTEX
-#define YOGHURT_MUTEX
+#ifndef EEVIX_MUTEX
+#define EEVIX_MUTEX
 
 #include <stdint.h>
 #include <sys/types.h>
 #include <pthread.h>
 
-namespace yoghurt
+namespace eevix
 {
 class Mutex
 {
@@ -54,4 +54,4 @@ inline void Mutex::unlock()
 typedef Mutex::Autolock AutoMutex;
 };
 
-#endif // YOGHURT_MUTEX
+#endif // EEVIX_MUTEX

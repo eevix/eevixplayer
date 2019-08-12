@@ -31,7 +31,7 @@
         </activity>
 
         <service
-            android:name="com.eevix.MediaRender"
+            android:name="com.eevix.DLNAMediaRender"
             android:enabled="true"
             android:exported="false" />
 

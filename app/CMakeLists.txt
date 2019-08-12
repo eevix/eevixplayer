@@ -68,18 +68,18 @@ set_target_properties(pltmediaserver
                       ${PLATINUM_PATH}/${ANDROID_ABI}/libPltMediaServer.a)
 
 #yoghurtjni
-add_library(yoghurtjni
+add_library(eevixjni
             SHARED
-        src/main/cpp/jni/src/AndroidBundle.cpp)
+            src/main/cpp/jni/src/AndroidBundle.cpp)
 
 include_directories(src/main/cpp/jni/include/)
 
-target_link_libraries(yoghurtjni cogs)
+target_link_libraries(eevixjni cogs)
 
 #yoghurtmediarender
-add_library(yoghurtmediarender
+add_library(dlnamediarender
             SHARED
-            src/main/cpp/YoghurtMediaRender.cpp)
+            src/main/cpp/DLNAMediaRender.cpp)
 
 
-target_link_libraries(yoghurtmediarender pltmediarender pltmediaserver platinum neptune axtls zlib yoghurtjni cogs log)
+target_link_libraries(dlnamediarender pltmediarender pltmediaserver platinum neptune axtls zlib eevixjni cogs log)

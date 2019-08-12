@@ -2,7 +2,7 @@
 #include "AndroidBundle.h"
 #include "Log.h"
 
-namespace yoghurt
+namespace eevix
 {
 
 const char* const AndroidBundle::mClassName = "android/os/Bundle";

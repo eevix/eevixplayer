@@ -1,10 +1,10 @@
-#ifndef YOGHURT_CONDITION_H
-#define YOGHURT_CONDITION_H
+#ifndef EEVIX_CONDITION_H
+#define EEVIX_CONDITION_H
 
 #include <pthread.h>
 #include "Mutex.h"
 
-namespace yoghurt
+namespace eevix
 {
 
 class Condition
@@ -41,4 +41,4 @@ private:
 
 } // namespace eevix
 
-#endif // YOGHURT_CONDITION_H
+#endif // EEVIX_CONDITION_H
