@@ -79,6 +79,14 @@ void KeyedData::setString(const int32_t key, const char* string, const uint32_t 
     item.mType = Item::STRING;
 }
 
+void KeyedData::setBool(const int32_t key, bool value)
+{
+    Item& item = getItem(key);
+    item.mSize = sizeof(value);
+    item.mData.boolValue = value;
+    item.mType = Item::BOOL;
+}
+
 bool KeyedData::getInt32(const int32_t key, int32_t &value)
 {
     Items::iterator iterator = mItems.find(key);
@@ -153,6 +161,22 @@ bool KeyedData::getString(const int32_t key, std::string& string)
         if (item.mSize != 0 && item.mType == Item::STRING)
         {
             string = *item.mData.stringValue;
+            return true;
+        }
+    }
+
+    return false;
+}
+
+bool KeyedData::getBool(const int32_t key, bool& value)
+{
+    Items::iterator iterator = mItems.find(key);
+    if (iterator != mItems.end())
+    {
+        const Item& item = iterator->second;
+        if (item.mSize != 0 && item.mType == Item::BOOL)
+        {
+            value = item.mData.boolValue;
             return true;
         }
     }

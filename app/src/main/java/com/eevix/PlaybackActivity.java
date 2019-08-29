@@ -1,11 +1,14 @@
 package com.eevix;
 
 import android.app.Activity;
+import android.content.ComponentName;
 import android.content.Intent;
+import android.content.ServiceConnection;
 import android.media.MediaPlayer;
 import android.os.Handler;
 import android.os.HandlerThread;
 import android.os.Bundle;
+import android.os.IBinder;
 import android.os.Message;
 import android.util.Log;
 import android.view.MotionEvent;
@@ -13,10 +16,6 @@ import android.view.SurfaceHolder;
 import android.view.SurfaceView;
 import android.view.View;
 
-/**
- * An example full-screen activity that shows and hides the system UI (i.e.
- * status bar and navigation/system bar) with user interaction.
- */
 public class PlaybackActivity extends Activity {
     private static final String TAG = "PlaybackActivity";
     private static final int mMediaControllerBarVisibleTime = 5000; // ms
@@ -32,11 +31,108 @@ public class PlaybackActivity extends Activity {
     private boolean         mSurfaceValid = false;
     private int             mVideoWidth = 0;
     private int             mVideoHeight = 0;
+    private DLNAMediaRender.PlaybackControllerRegister mPlaybackControllerRegister;
+    private Controller      mController = new Controller();
+    private PlayerState     mState = PlayerState.IDLE;
+
+    enum PlayerState {
+        IDLE,
+        PREPARING,
+        PLAYING,
+        PAUSED,
+    }
+
+    private class Controller implements PlaybackController {
+        private StateChangedListener mStateChangedListener = null;
+
+        @Override
+        public void setDataSource(String url) {
+            Log.d(TAG, "Controller setDataSource:" + url);
+            mPlayerHandler.obtainMessage(MessageType.SET_DATA_SOURCE.value(), url).sendToTarget();
+        }
+
+        @Override
+        public void start() {
+            mPlayerHandler.sendEmptyMessage(MessageType.START.value());
+        }
+
+        @Override
+        public void pause() {
+            mPlayerHandler.sendEmptyMessage(MessageType.PAUSE.value());
+        }
+
+        @Override
+        public void resume() {
+            mPlayerHandler.sendEmptyMessage(MessageType.START.value());
+        }
+
+        @Override
+        public void stop() {
+            mPlayerHandler.sendEmptyMessage(MessageType.STOP.value());
+        }
+
+        @Override
+        public void seek(int millisecond) {
+            mPlayerHandler.removeMessages(MessageType.UPDATE.value());
+            mPlayerHandler.obtainMessage(MessageType.SEEK.value(), millisecond, 0).sendToTarget();
+            mMainHandler.removeMessages(MessageType.UPDATE.value());
+        }
+
+        @Override
+        public int getCurrentPosition() {
+            MessageReply<Integer> reply = new MessageReply<>();
+            mPlayerHandler.obtainMessage(MessageType.GET_CURRENT_POSITION.value(), reply).sendToTarget();
+            reply.waitReply();
+            Log.d(TAG, "getCurrentPosition:" + reply.getData());
+            return reply.getData();
+        }
+
+        @Override
+        public int getDuration() {
+            MessageReply<Integer> reply = new MessageReply<>();
+            mPlayerHandler.obtainMessage(MessageType.GET_DURATION.value(), reply).sendToTarget();
+            reply.waitReply();
+            Log.d(TAG, "getDuration:" + reply.getData());
+            return reply.getData();
+        }
+
+        @Override
+        public boolean isPlaying() {
+            MessageReply<PlayerState> reply = new MessageReply<>();
+            mPlayerHandler.obtainMessage(MessageType.QUERY_STATE.value(), reply).sendToTarget();
+            reply.waitReply();
+            return reply.getData() == PlayerState.PLAYING;
+        }
+
+        @Override
+        public int getState() {
+            MessageReply<PlayerState> reply = new MessageReply<>();
+            mPlayerHandler.obtainMessage(MessageType.QUERY_STATE.value(), reply).sendToTarget();
+            reply.waitReply();
+            return convertState(reply.getData());
+        }
+
+        @Override
+        public void setStateChangedListener(StateChangedListener listener) {
+            mStateChangedListener = listener;
+        }
+
+        void changeState(int state) {
+            if (mStateChangedListener != null) {
+                mStateChangedListener.onStateChanged(state);
+            }
+        }
+    }
+
     private enum MessageType {
+        SET_DATA_SOURCE,
         START,
         PAUSE,
         STOP,
         SEEK,
+        GET_CURRENT_POSITION,
+        GET_DURATION,
+        QUERY_STATE,
         PREPARED,
         COMPLETED,
         SURFACE_CREATED,
@@ -82,28 +178,31 @@ public class PlaybackActivity extends Activity {
     }
 
     private class PlayerListener implements MediaPlayer.OnPreparedListener,
-                                    MediaPlayer.OnCompletionListener,
-                                    MediaPlayer.OnSeekCompleteListener,
-                                    MediaPlayer.OnVideoSizeChangedListener {
+                                            MediaPlayer.OnCompletionListener,
+                                            MediaPlayer.OnSeekCompleteListener,
+                                            MediaPlayer.OnVideoSizeChangedListener {
         @Override
         public void onCompletion(MediaPlayer mp) {
+            Log.d(TAG, "PlayerListener onCompletion");
             mPlayerHandler.sendEmptyMessage(MessageType.COMPLETED.value());
         }
 
         @Override
         public void onPrepared(MediaPlayer mp) {
+            Log.d(TAG, "PlayerListener onPrepared");
             mPlayerHandler.sendEmptyMessage(MessageType.PREPARED.value());
         }
 
         @Override
         public void onSeekComplete(MediaPlayer mp) {
+            Log.d(TAG, "PlayerListener onSeekComplete");
             mPlayerHandler.sendEmptyMessage(MessageType.UPDATE.value());
             mPlayerHandler.sendEmptyMessage(MessageType.START.value());
         }
 
         @Override
         public void onVideoSizeChanged(MediaPlayer mp, int width, int height) {
-            Log.d(TAG, "onVideoSizeChanged, width:" + width + ", height:" + height);
+            Log.d(TAG, "PlayerListener onVideoSizeChanged, width:" + width + ", height:" + height);
             Message message = mMainHandler.obtainMessage(MessageType.UPDATE_VIDEO_SIZE.value());
             Bundle bundle = new Bundle();
             bundle.putInt("video-width", width);
@@ -117,17 +216,15 @@ public class PlaybackActivity extends Activity {
         @Override
         public void onPlay(boolean play) {
             if (play) {
-                mPlayerHandler.sendEmptyMessage(MessageType.START.value());
+                mController.start();
             } else {
-                mPlayerHandler.sendEmptyMessage(MessageType.PAUSE.value());
+                mController.pause();
             }
         }
 
         @Override
         public void onSeek(int position) {
-            mPlayerHandler.removeMessages(MessageType.UPDATE.value());
-            mPlayerHandler.obtainMessage(MessageType.SEEK.value(), position, 0).sendToTarget();
-            mMainHandler.removeMessages(MessageType.UPDATE.value());
+            mController.seek(position);
         }
     }
 
@@ -158,8 +255,9 @@ public class PlaybackActivity extends Activity {
         });
         mSurfaceView.getHolder().addCallback(new SurfaceHolderCallback());
         mPlayerListener = new PlayerListener();
-
         mPlayerHandlerThread = new HandlerThread("playerThread");
+        mMainHandler.sendEmptyMessageDelayed(MessageType.HIDE_CONTROLLER_BAR.value(), mMediaControllerBarVisibleTime);
+
         mPlayerHandlerThread.start();
         mPlayerHandler = new Handler(mPlayerHandlerThread.getLooper()) {
             @Override
@@ -168,11 +266,6 @@ public class PlaybackActivity extends Activity {
                 handlePlayerThreadMessage(msg);
             }
         };
-        mMainHandler.sendEmptyMessageDelayed(MessageType.HIDE_CONTROLLER_BAR.value(), mMediaControllerBarVisibleTime);
-        Log.d(TAG, "original orientation:" + getResources().getConfiguration().orientation);
-        Log.d(TAG, "displayLayoutWidth:" + mDisplayLayout.getMeasuredWidth() + ", displayLayoutHeight:" + mDisplayLayout.getMeasuredHeight());
-
-        onIntent(getIntent());
     }
 
     @Override
@@ -196,12 +289,18 @@ public class PlaybackActivity extends Activity {
     protected void onStart() {
         Log.d(TAG, "onStart");
         super.onStart();
+        onIntent(getIntent());
     }
 
     @Override
     protected void onPause() {
         Log.d(TAG, "onPause");
         super.onPause();
+
+        if (mPlaybackControllerRegister != null) {
+            mPlaybackControllerRegister.registerPlayerBackController(null);
+        }
+
         if (mPlayerHandler != null) {
             mPlayerHandler.sendEmptyMessage(MessageType.STOP.value());
         }
@@ -211,9 +310,27 @@ public class PlaybackActivity extends Activity {
     protected void onStop() {
         Log.d(TAG, "onStop");
         super.onStop();
+    }
+
+    @Override
+    protected void onRestart() {
+        Log.d(TAG, "onRestart");
+        super.onRestart();
+    }
+
+    @Override
+    protected void onDestroy() {
+        Log.d(TAG, "onDestroy");
+        super.onDestroy();
         if (mPlayerHandlerThread != null) {
             mPlayerHandlerThread.quitSafely();
         }
+    }
+
+    @Override
+    protected void onResume() {
+        Log.d(TAG, "onResume");
+        super.onResume();
     }
 
     @Override
@@ -227,10 +344,42 @@ public class PlaybackActivity extends Activity {
         Log.d(TAG, "onIntent:" + intent);
         String action = intent.getAction();
         String data = intent.getDataString();
+        String from = intent.getStringExtra("from");
+
+        if (from !=null && from.equals("DLNAMediaRender")) {
+            Intent intent2 = new Intent();
+            intent2.setClass(this, DLNAMediaRender.class);
+            bindService(intent2, new ServiceConnection() {
+                @Override
+                public void onServiceConnected(ComponentName name, IBinder service) {
+                    Log.d(TAG, "onServiceConnected, name:" + name + ", service:" + service);
+                    if (service instanceof DLNAMediaRender.PlaybackControllerRegister) {
+                        mPlaybackControllerRegister = (DLNAMediaRender.PlaybackControllerRegister) service;
+                        mPlaybackControllerRegister.registerPlayerBackController(mController);
+                    }
+                }
+
+                @Override
+                public void onServiceDisconnected(ComponentName name) {
+                    Log.d(TAG, "onServiceDisconnected, name:" + name);
+                    mController.stop();
+                }
+
+                @Override
+                public void onBindingDied(ComponentName name) {
+                    Log.d(TAG, "onBindingDied, name:" + name);
+                    mController.stop();
+                }
+
+                @Override
+                public void onNullBinding(ComponentName name) {
+                    Log.d(TAG, "onNullBinding, name:" + name);
+                }
+            }, BIND_AUTO_CREATE);
+        }
+
         if (action != null && action.equals(Intent.ACTION_VIEW)) {
-            boolean ret = mPlayerHandler.sendMessage(mPlayerHandler.obtainMessage(MessageType.START.value(), data));
-            Log.d(TAG, "play:" + (data == null ? "" : data));
-            Log.d(TAG, "ret:" + ret);
+            mController.setDataSource(data);
         }
     }
 
@@ -310,20 +459,26 @@ public class PlaybackActivity extends Activity {
         if (messageType == null) {
             return;
         }
-        Log.d(TAG, "handlePlayerThreadMessage:" + messageType);
+
         switch (messageType) {
-            case START: {
+            case SET_DATA_SOURCE: {
                 if (msg.obj instanceof String) {
                     play((String)msg.obj);
-                } else if (mMediaPlayer != null) {
+                }
+                break;
+            }
+            case START: {
+                Log.d(TAG, "handle message:START");
+                if (mMediaPlayer != null && mState == PlayerState.PAUSED) {
                     try {
-                            mMediaPlayer.start();
-                            mMainHandler.sendEmptyMessage(MessageType.STARTED.value());
-                            mPlayerHandler.sendEmptyMessage(MessageType.UPDATE.value());
+                        mMediaPlayer.start();
+                        mMainHandler.sendEmptyMessage(MessageType.STARTED.value());
+                        mPlayerHandler.sendEmptyMessage(MessageType.UPDATE.value());
+                        changeState(PlayerState.PLAYING);
                     } catch (Exception exception) {
                         Log.e(TAG, "exception:", exception);
                     }
-                } else if (mUrl != null) {
+                } else if (mUrl != null && mState == PlayerState.IDLE) {
                     play(mUrl);
                 }
                 break;
@@ -333,6 +488,7 @@ public class PlaybackActivity extends Activity {
                     if (mMediaPlayer != null) {
                         mMediaPlayer.pause();
                         mMainHandler.sendEmptyMessage(MessageType.PAUSED.value());
+                        changeState(PlayerState.PAUSED);
                     }
                 } catch (Exception exception) {
                     Log.e(TAG, "exception:", exception);
@@ -347,7 +503,7 @@ public class PlaybackActivity extends Activity {
             }
             case SEEK: {
                 try {
-                    if (mMediaPlayer != null) {
+                    if (mMediaPlayer != null && (mState == PlayerState.PLAYING || mState == PlayerState.PAUSED)) {
                         mMediaPlayer.seekTo(msg.arg1);
                     }
                 } catch (Exception exception) {
@@ -355,11 +511,42 @@ public class PlaybackActivity extends Activity {
                 }
                 break;
             }
+            case GET_CURRENT_POSITION: {
+                int position = 0;
+                if (mMediaPlayer != null) {
+                    position = mMediaPlayer.getCurrentPosition();
+                }
+
+                MessageReply<Integer> reply = ((MessageReply<Integer>) msg.obj);
+                reply.setData(position);
+                Log.d(TAG, "GET_CURRENT_POSITION position:" + position);
+                reply.notifyReply();
+                break;
+            }
+            case GET_DURATION: {
+                int duration = 0;
+                if (mMediaPlayer != null) {
+                    duration = mMediaPlayer.getDuration();
+                }
+
+                MessageReply<Integer> reply = ((MessageReply<Integer>) msg.obj);
+                reply.setData(duration);
+                Log.d(TAG, "GET_DURATION duration:" + duration);
+                reply.notifyReply();
+                break;
+            }
+            case QUERY_STATE: {
+                MessageReply<PlayerState> reply = ((MessageReply<PlayerState>) msg.obj);
+                reply.setData(mState);
+                reply.notifyReply();
+                break;
+            }
             case PREPARED: {
                 try {
                     if (mMediaPlayer != null) {
                         mMediaPlayer.start();
                         Log.e(TAG, "mMediaPlayer.start()");
+                        changeState(PlayerState.PLAYING);
                         Message message = mMainHandler.obtainMessage(MessageType.STARTED.value());
                         Bundle bundle = new Bundle();
                         bundle.putInt("duration", mMediaPlayer.getDuration());
@@ -451,6 +638,7 @@ public class PlaybackActivity extends Activity {
             }
             Log.e(TAG, "mMediaPlayer.prepareAsync()");
             mMediaPlayer.prepareAsync();
+            changeState(PlayerState.PREPARING);
         } catch (Exception exception) {
             Log.e(TAG, "exception:" + exception);
             mMediaPlayer.release();
@@ -464,9 +652,23 @@ public class PlaybackActivity extends Activity {
             mMediaPlayer.release();
             mMediaPlayer = null;
         }
+
+        changeState(PlayerState.IDLE);
     }
 
-    private String millisecondsToTime(int milliseconds) {
-        return String.format("%02d:%02d:%02d", milliseconds / 1000 / 3600, milliseconds / 1000 / 60 % 60, milliseconds / 1000 % 60);
+    private void changeState(PlayerState state) {
+        Log.d(TAG, "state:" + state);
+        mState = state;
+        mController.changeState(convertState(state));
+    }
+
+    private int convertState(PlayerState state) {
+        switch (state) {
+            case PLAYING: return PlaybackController.STATE_PLAYING;
+            case IDLE: return PlaybackController.STATE_IDLE;
+            case PREPARING: return PlaybackController.STATE_PREPARING;
+            case PAUSED: return PlaybackController.STATE_PAUSED;
+            default: throw new IllegalArgumentException();
+        }
     }
 }

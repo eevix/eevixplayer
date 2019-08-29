@@ -40,6 +40,24 @@ public:
         return false;
     }
 
+    bool pop(T& item, uint64_t timeout)
+    {
+        AutoMutex lock(mLock);
+        if (mVector.empty())
+        {
+            mCondition.wait(mLock, timeout);
+        }
+
+        if (!mVector.empty())
+        {
+            item = mVector[0];
+            mVector.erase(mVector.begin());
+            return true;
+        }
+
+        return false;
+    }
+
     bool pop(T* item)
     {
         AutoMutex lock(mLock);

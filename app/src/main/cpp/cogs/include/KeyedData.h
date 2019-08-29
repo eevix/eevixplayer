@@ -19,12 +19,14 @@ public:
     void setData(const int32_t key, void* data, const uint32_t size);
     void setString(const int32_t key, const std::string& string);
     void setString(const int32_t key, const char* string, const uint32_t size);
+    void setBool(const int32_t key, bool value);
 
     bool getInt32(const int32_t key, int32_t& value);
     bool getInt64(const int32_t key, int64_t& value);
     bool getObject(const int32_t key, const void** value);
     bool getData(const int32_t key, void* data, uint32_t& size);
     bool getString(const int32_t key, std::string& string);
+    bool getBool(const int32_t key, bool& value);
 
 private:
     struct Item
@@ -36,6 +38,7 @@ private:
             OBJECT,
             DATA,
             STRING,
+            BOOL,
         } mType;
         union
         {
@@ -44,6 +47,7 @@ private:
             const void* objectValue;
             void*       dataValue;
             std::string* stringValue;
+            bool        boolValue;
         } mData;
         uint32_t mSize = 0;
     };
