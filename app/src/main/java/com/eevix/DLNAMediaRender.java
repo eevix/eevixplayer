@@ -33,13 +33,16 @@ public class DLNAMediaRender extends Service {
             Log.d(TAG, "PlaybackController controller:" + controller);
             synchronized (DLNAMediaRender.this) {
                 mPlaybackController = controller;
-                mPlaybackController.setStateChangedListener(new PlaybackController.StateChangedListener() {
-                    @Override
-                    public void onStateChanged(int state) {
-                        Log.d(TAG, "state:" + state);
-                        DLNAMediaRender.this.onStateChanged(state);
-                    }
-                });
+
+                if (mPlaybackController != null) {
+                    mPlaybackController.setStateChangedListener(new PlaybackController.StateChangedListener() {
+                        @Override
+                        public void onStateChanged(int state) {
+                            Log.d(TAG, "state:" + state);
+                            DLNAMediaRender.this.onStateChanged(state);
+                        }
+                    });
+                }
 
                 DLNAMediaRender.this.notify();
             }

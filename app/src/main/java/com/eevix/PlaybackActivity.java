@@ -299,6 +299,7 @@ public class PlaybackActivity extends Activity {
 
         if (mPlaybackControllerRegister != null) {
             mPlaybackControllerRegister.registerPlayerBackController(null);
+            mPlaybackControllerRegister = null;
         }
 
         if (mPlayerHandler != null) {
@@ -628,6 +629,7 @@ public class PlaybackActivity extends Activity {
         mMediaPlayer.setOnCompletionListener(mPlayerListener);
         mMediaPlayer.setOnSeekCompleteListener(mPlayerListener);
         mMediaPlayer.setOnVideoSizeChangedListener(mPlayerListener);
+        mMediaPlayer.setScreenOnWhilePlaying(true);
 
         try {
             Log.e(TAG, "mMediaPlayer.setDataSource()");
