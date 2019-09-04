@@ -67,19 +67,9 @@ set_target_properties(pltmediaserver
                       PROPERTIES IMPORTED_LOCATION
                       ${PLATINUM_PATH}/${ANDROID_ABI}/libPltMediaServer.a)
 
-#yoghurtjni
-add_library(eevixjni
-            SHARED
-            src/main/cpp/jni/src/AndroidBundle.cpp)
-
-include_directories(src/main/cpp/jni/include/)
-
-target_link_libraries(eevixjni cogs)
-
 #yoghurtmediarender
 add_library(dlnamediarender
             SHARED
             src/main/cpp/DLNAMediaRender.cpp)
 
-
-target_link_libraries(dlnamediarender pltmediarender pltmediaserver platinum neptune axtls zlib eevixjni cogs log)
+target_link_libraries(dlnamediarender pltmediarender pltmediaserver platinum neptune axtls zlib cogs log)

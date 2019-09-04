@@ -8,9 +8,9 @@
 #if defined ANDROID
 #include <android/log.h>
 
-#define YLOGD(fmt, args...)                 __android_log_print(ANDROID_LOG_DEBUG, LOG_TAG, "[%s][%d] " fmt, __FUNCTION__, __LINE__, ##args)
-#define YLOGE(fmt, args...)                 __android_log_print(ANDROID_LOG_ERROR, LOG_TAG, "[%s][%d] " fmt, __FUNCTION__, __LINE__, ##args)
-#define YFATAL_IF(condition)                 do \
+#define LOGD(fmt, args...)                   __android_log_print(ANDROID_LOG_DEBUG, LOG_TAG, "[%s][%d] " fmt, __FUNCTION__, __LINE__, ##args)
+#define LOGE(fmt, args...)                   __android_log_print(ANDROID_LOG_ERROR, LOG_TAG, "[%s][%d] " fmt, __FUNCTION__, __LINE__, ##args)
+#define FATAL_IF(condition)                  do \
                                              { \
                                                  if (condition) \
                                                  { \
@@ -22,10 +22,10 @@
 #elif defined WIN32
 #include <stdio.h>
 
-#define YLOGD(fmt, args...)                 printf(LOG_TAG " [%s][%d] " fmt "\n", __FUNCTION__, __LINE__, ##args)
-#define YLOGE(fmt, args...)                 printf(LOG_TAG " [%s][%d] " fmt "\n", __FUNCTION__, __LINE__, ##args)
-#define YFATAL_IF(condition)
+#define LOGD(fmt, args...)                 printf(LOG_TAG " [%s][%d] " fmt "\n", __FUNCTION__, __LINE__, ##args)
+#define LOGE(fmt, args...)                 printf(LOG_TAG " [%s][%d] " fmt "\n", __FUNCTION__, __LINE__, ##args)
+#define FATAL_IF(condition)
 
-#endif
+#endif // defined WIN32
 
-#endif //EEVIX_LOG_H
+#endif // EEVIX_LOG_H

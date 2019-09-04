@@ -2,7 +2,7 @@ package com.eevix;
 
 import java.util.concurrent.Semaphore;
 
-public class MessageReply<T> {
+class MessageReply<T> {
     private Semaphore mSemaphore= new Semaphore(0);
     private T mData = null;
 

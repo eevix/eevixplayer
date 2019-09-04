@@ -89,4 +89,4 @@ private:
 };
 
 }
-#endif //EEVIXMEDIA_QUEUE_H
+#endif // EEVIX_QUEUE_H

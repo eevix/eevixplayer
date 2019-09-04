@@ -58,7 +58,7 @@ void KeyedData::setData(const int32_t key, void* data, const uint32_t size)
     Item& item = getItem(key);
     item.mSize = size;
     item.mData.dataValue = malloc(size);
-    YFATAL_IF(item.mData.dataValue == NULL);
+    FATAL_IF(item.mData.dataValue == NULL);
     memcpy(item.mData.dataValue, data, size);
     item.mType = Item::DATA;
 }

@@ -5,14 +5,12 @@
 #include <semaphore.h>
 #include "Thread.h"
 #include "Queue.h"
-#include "AndroidBundle.h"
 #include "KeyedData.h"
 #include "PltUPnP.h"
 #include "PltMediaRenderer.h"
 
 using eevix::Thread;
 using eevix::Queue;
-using eevix::AndroidBundle;
 using eevix::KeyedData;
 
 static void nativeInit(JNIEnv* env);
@@ -39,6 +37,24 @@ static struct PlayerState {
     int paused;
     int playing;
 } sPlayerState;
+
+static inline char* formatTime(uint32_t time)
+{
+    char* formatTime = NULL;
+    time /= 1000;
+    asprintf(&formatTime, "%02u:%02u:%02u", time / 3600, time / 60 % 60, time % 60);
+    return formatTime;
+}
+
+template <typename T>
+static inline void safeFree(T*& p)
+{
+    if (p != NULL)
+    {
+        free(p);
+        p = NULL;
+    }
+}
 
 class MediaRenderer : public PLT_MediaRenderer
 {
@@ -137,7 +153,6 @@ private:
     void onMessage(JNIEnv* env, std::shared_ptr<Message>& message);
     void update();
     bool isPlaying();
-    bool setDataSource(const char* url);
     uint32_t getCurrentPosition();
     uint32_t getDuration();
 
@@ -156,14 +171,14 @@ MediaRenderer::MediaRenderer(const char*    friendlyName,
      :PLT_MediaRenderer(friendlyName, showIP, uuid, port, portRebind),
       mPlayerState(sPlayerState.idle)
 {
-    YLOGD("friendlyName:%s, showIP:%d, uuid:%s, port:%u, portRebind:%d", friendlyName, showIP, uuid, port, portRebind);
+    LOGD("friendlyName:%s, showIP:%d, uuid:%s, port:%u, portRebind:%d", friendlyName, showIP, uuid, port, portRebind);
     mThread = new Looper(this);
     mThread->run("MediaRenderThread");
 }
 
 MediaRenderer::~MediaRenderer()
 {
-    YLOGD();
+    LOGD();
     mThread->requestExitAndWait();
     delete mThread;
 }
@@ -182,32 +197,32 @@ NPT_Result MediaRenderer::OnNext(PLT_ActionReference& action)
 
 NPT_Result MediaRenderer::OnPause(PLT_ActionReference& action)
 {
-    YLOGD("action:%s, counter:%d", action->GetActionDesc().GetName().GetChars(), action.GetCounter());
+    LOGD("action:%s, counter:%d", action->GetActionDesc().GetName().GetChars(), action.GetCounter());
     mMessageQueue.push(std::make_shared<Message>(Message::kPause));
     return NPT_SUCCESS;
 }
 
 NPT_Result MediaRenderer::OnPlay(PLT_ActionReference& action)
 {
-    YLOGD("action:%s, counter:%d", action->GetActionDesc().GetName().GetChars(), action.GetCounter());
+    LOGD("action:%s, counter:%d", action->GetActionDesc().GetName().GetChars(), action.GetCounter());
     mMessageQueue.push(std::make_shared<Message>(Message::kStart));
     return NPT_SUCCESS;
 }
 
 NPT_Result MediaRenderer::OnPrevious(PLT_ActionReference& action)
 {
-    YLOGD();
+    LOGD();
     return NPT_SUCCESS;
 }
 
 NPT_Result MediaRenderer::OnSeek(PLT_ActionReference& action)
 {
-    YLOGD("OnSeek");
+    LOGD("OnSeek");
     NPT_String unit;
     NPT_String target;
     action->GetArgumentValue("Unit", unit);
     action->GetArgumentValue("Target", target);
-    YLOGD("unit:%s, target:%s", unit.GetChars(), target.GetChars());
+    LOGD("unit:%s, target:%s", unit.GetChars(), target.GetChars());
     std::shared_ptr<Message> message = std::make_shared<Message>(Message::kSeek);
     uint32_t hour = 0;
     uint32_t minute = 0;
@@ -220,17 +235,17 @@ NPT_Result MediaRenderer::OnSeek(PLT_ActionReference& action)
 
 NPT_Result MediaRenderer::OnStop(PLT_ActionReference& action)
 {
-    YLOGD("action:%s, counter:%d", action->GetActionDesc().GetName().GetChars(), action.GetCounter());
+    LOGD("action:%s, counter:%d", action->GetActionDesc().GetName().GetChars(), action.GetCounter());
     mMessageQueue.push(std::make_shared<Message>(Message::kStop));
     return NPT_SUCCESS;
 }
 
 NPT_Result MediaRenderer::OnSetAVTransportURI(PLT_ActionReference& action)
 {
-    YLOGD("action:%s, counter:%d", action->GetActionDesc().GetName().GetChars(), action.GetCounter());
+    LOGD("action:%s, counter:%d", action->GetActionDesc().GetName().GetChars(), action.GetCounter());
     PLT_MediaRenderer::OnSetAVTransportURI(action);
     std::shared_ptr<Message> message = std::make_shared<Message>(Message::kSetAVTransportURI);
-    YLOGD("type:%d", message->type());
+    LOGD("type:%d", message->type());
     NPT_String uri;
     bool ret = false;
     NPT_CHECK_WARNING(action->GetArgumentValue("CurrentURI", uri));
@@ -238,7 +253,7 @@ NPT_Result MediaRenderer::OnSetAVTransportURI(PLT_ActionReference& action)
     mMessageQueue.push(message);
     message->waitReply();
     message->getBool(Message::kReply, ret);
-    YLOGD("ret:%d", ret);
+    LOGD("ret:%d", ret);
     if (ret)
     {
         PLT_Service* serviceAVT;
@@ -262,39 +277,39 @@ NPT_Result MediaRenderer::OnSetAVTransportURI(PLT_ActionReference& action)
 
 NPT_Result MediaRenderer::OnSetPlayMode(PLT_ActionReference& action)
 {
-    YLOGD();
+    LOGD();
     return NPT_SUCCESS;
 }
 
 // RenderingControl
 NPT_Result MediaRenderer::OnSetVolume(PLT_ActionReference& action)
 {
-    YLOGD();
+    LOGD();
     return NPT_SUCCESS;
 }
 
 NPT_Result MediaRenderer::OnSetVolumeDB(PLT_ActionReference &action)
 {
-    YLOGD();
+    LOGD();
     return NPT_SUCCESS;
 }
 
 NPT_Result MediaRenderer::OnGetVolumeDBRange(PLT_ActionReference &action)
 {
-    YLOGD();
+    LOGD();
     return NPT_SUCCESS;
 }
 
 NPT_Result MediaRenderer::OnSetMute(PLT_ActionReference& action)
 {
-    YLOGD();
+    LOGD();
     return NPT_SUCCESS;
 }
 
 bool MediaRenderer::threadLoop()
 {
-    YLOGD();
-    YFATAL_IF(sJavaVM == NULL);
+    LOGD();
+    FATAL_IF(sJavaVM == NULL);
     JNIEnv* jniEnv = NULL;
 
     sJavaVM->AttachCurrentThread(&jniEnv, NULL);
@@ -304,7 +319,7 @@ bool MediaRenderer::threadLoop()
         std::shared_ptr<Message> message;
         if (mMessageQueue.pop(message, 500))
         {
-            YLOGD("message:%d", message->type());
+            LOGD("message:%d", message->type());
             onMessage(jniEnv, message);
         }
         update();
@@ -324,10 +339,10 @@ void MediaRenderer::onMessage(JNIEnv* jniEnv, std::shared_ptr<Message>& message)
     {
         case Message::kSetAVTransportURI:
         {
-            YLOGD("SetAVTransportURI");
+            LOGD("SetAVTransportURI");
             std::string uri;
-            YFATAL_IF(!message->getString(Message::kUrl, uri));
-            YLOGD("%s", uri.c_str());
+            FATAL_IF(!message->getString(Message::kUrl, uri));
+            LOGD("%s", uri.c_str());
             jboolean ret = jniEnv->CallBooleanMethod(sJMediaRender, sSetDataSource, jniEnv->NewStringUTF(uri.c_str()));
             message->setBool(Message::kReply, ret);
             message->postReply();
@@ -335,27 +350,27 @@ void MediaRenderer::onMessage(JNIEnv* jniEnv, std::shared_ptr<Message>& message)
         }
         case Message::kOnStateChanged:
         {
-            YLOGD("kOnStateChanged");
-            int state;
-            YFATAL_IF(!message->getInt32(Message::kState, state));
+            LOGD("kOnStateChanged");
+            int state = 0;
+            FATAL_IF(!message->getInt32(Message::kState, state));
             OnStateChanged_l(state);
             break;
         }
         case Message::kStop:
         {
-            YLOGD("kStop");
+            LOGD("kStop");
             jniEnv->CallVoidMethod(sJMediaRender, sStop);
             break;
         }
         case Message::kStart:
         {
-            YLOGD("kStart");
+            LOGD("kStart");
             jniEnv->CallVoidMethod(sJMediaRender, sStart);
             break;
         }
         case Message::kPause:
         {
-            YLOGD("kPause");
+            LOGD("kPause");
             jniEnv->CallVoidMethod(sJMediaRender, sPause);
             break;
         }
@@ -363,7 +378,7 @@ void MediaRenderer::onMessage(JNIEnv* jniEnv, std::shared_ptr<Message>& message)
         {
             int32_t target = 0;
             message->getInt32(Message::kSeekTarget, target);
-            YLOGD("kSeek, target:%d", target);
+            LOGD("kSeek, target:%d", target);
             jniEnv->CallVoidMethod(sJMediaRender, sSeek, target);
             break;
         }
@@ -378,22 +393,13 @@ void MediaRenderer::update()
 {
     if (isPlaying())
     {
-        uint32_t position = getCurrentPosition();
-        char * position1 = NULL;
-        asprintf(&position1, "%02u:%02u:%02u", position / 1000 / 3600, position / 1000 / 60 % 60, position / 1000 % 60);
-        YLOGD("position1:%s", position1);
-
-        PLT_Service* serviceAVT;
+        char * position = formatTime(getCurrentPosition());
+        PLT_Service* serviceAVT = NULL;
         FindServiceByType("urn:schemas-upnp-org:service:AVTransport:1", serviceAVT);
-
         // GetPositionInfo
-        serviceAVT->SetStateVariable("RelativeTimePosition", position1);
-
-        if (position1 != NULL)
-        {
-            free(position1);
-            position1 = NULL;
-        }
+        FATAL_IF(serviceAVT == NULL);
+        serviceAVT->SetStateVariable("RelativeTimePosition", position);
+        safeFree(position);
     }
 }
 
@@ -420,7 +426,7 @@ uint32_t MediaRenderer::getDuration()
 
 void MediaRenderer::OnStateChanged_l(int state)
 {
-    YLOGD("state:%d", state);
+    LOGD("changed to state:%d", state);
     PLT_Service* serviceAVT;
     FindServiceByType("urn:schemas-upnp-org:service:AVTransport:1", serviceAVT);
     if (mPlayerState == state) {
@@ -447,30 +453,23 @@ void MediaRenderer::OnStateChanged_l(int state)
     } else if (state == sPlayerState.paused) {
         serviceAVT->SetStateVariable("TransportState", "PAUSED_PLAYBACK");
     } else if (state == sPlayerState.playing) {
-        uint32_t duration = getDuration();
-        char * duration1 = NULL;
-        asprintf(&duration1, "%02u:%02u:%02u", duration / 1000 / 3600, duration / 1000 / 60 % 60, duration / 1000 % 60);
-        YLOGD("duration1:%s", duration1);
+        char* duration = formatTime(getDuration());
+        LOGD("duration:%s", duration);
 
         // GetMediaInfo
-        serviceAVT->SetStateVariable("CurrentMediaDuration", duration1);
+        serviceAVT->SetStateVariable("CurrentMediaDuration", duration);
 
         // GetPositionInfo
-        serviceAVT->SetStateVariable("CurrentTrackDuration", duration1);
+        serviceAVT->SetStateVariable("CurrentTrackDuration", duration);
 
         serviceAVT->SetStateVariable("TransportState", "PLAYING");
         serviceAVT->SetStateVariable("TransportStatus", "OK");
         serviceAVT->SetStateVariable("TransportPlaySpeed", "1");
-
-        if (duration1 != NULL)
-        {
-            free(duration1);
-            duration1 = NULL;
-        }
+        safeFree(duration);
     } else if (state == sPlayerState.preparing) {
         serviceAVT->SetStateVariable("TransportState", "TRANSITIONING");
     } else {
-        YFATAL_IF(!"error state");
+        FATAL_IF(!"error state");
     }
 
     mPlayerState = state;
@@ -479,17 +478,17 @@ void MediaRenderer::OnStateChanged_l(int state)
 MediaRenderer::Looper::Looper(MediaRenderer* mediaRenderer)
     :mMediaRender(mediaRenderer)
 {
-    YLOGD("mediaRenderer:%p", mediaRenderer);
+    LOGD("mediaRenderer:%p", mediaRenderer);
 }
 
 MediaRenderer::Looper::~Looper()
 {
-    YLOGD("destructor");
+    LOGD("destructor");
 }
 
 bool MediaRenderer::Looper::threadLoop()
 {
-    YLOGD();
+    LOGD();
 
     if (mMediaRender)
     {
@@ -499,14 +498,12 @@ bool MediaRenderer::Looper::threadLoop()
     return false;
 }
 
-#ifdef __cplusplus
 extern "C"
 {
-#endif
 
 jint JNI_OnLoad(JavaVM* vm, void* reserved)
 {
-    YLOGD("vm:%p", vm);
+    LOGD("vm:%p", vm);
     JNIEnv* env = NULL;
     sJavaVM = vm;
 
@@ -519,12 +516,12 @@ jint JNI_OnLoad(JavaVM* vm, void* reserved)
 
     if (vm->GetEnv((void**) &env, JNI_VERSION_1_4) != JNI_OK)
     {
-        YLOGE("ERROR: GetEnv failed");
+        LOGE("ERROR: GetEnv failed");
         return -1;
     }
 
     jclass DLNAServiceClass = env->FindClass(sDLNAServiceClassName);
-    YFATAL_IF(DLNAServiceClass == NULL);
+    FATAL_IF(DLNAServiceClass == NULL);
 
     if (0 > env->RegisterNatives(DLNAServiceClass, nativeMethods, sizeof(nativeMethods) / sizeof(nativeMethods[0])))
     {
@@ -536,7 +533,7 @@ jint JNI_OnLoad(JavaVM* vm, void* reserved)
 
 static void nativeInit(JNIEnv* env)
 {
-    YLOGD("env:%p", env);
+    LOGD("env:%p", env);
 
     if (!sUPNPService.IsRunning())
     {
@@ -555,43 +552,43 @@ static void nativeInit(JNIEnv* env)
         PLOGD("log level:%d IsEnabled:%d", logger->GetLevel(), loggerManager.IsEnabled());
 #endif
         /* start media render */
-        YFATAL_IF(!sMediaRender.IsNull());
+        FATAL_IF(!sMediaRender.IsNull());
         sMediaRender = new MediaRenderer("eevix-media-render", false, "a6572b54-f3c7-2d91-2fb5-b757f2537e22");
         sUPNPService.AddDevice(sMediaRender);
         sUPNPService.Start();
-        YLOGD("UPNP is running");
+        LOGD("UPNP is running");
     }
 }
 
 static void nativeSetup(JNIEnv* env, jobject mediaRender)
 {
-    YLOGD("env:%p", env);
+    LOGD("env:%p", env);
     sJMediaRender = env->NewGlobalRef(mediaRender);
-    YFATAL_IF(sJMediaRender == NULL);
+    FATAL_IF(sJMediaRender == NULL);
 
     sSetDataSource = env->GetMethodID(env->GetObjectClass(mediaRender), "setDataSource", "(Ljava/lang/String;)Z");
-    YFATAL_IF(sSetDataSource == NULL);
+    FATAL_IF(sSetDataSource == NULL);
 
     sIsPlaying = env->GetMethodID(env->GetObjectClass(mediaRender), "isPlaying", "()Z");
-    YFATAL_IF(sIsPlaying == NULL);
+    FATAL_IF(sIsPlaying == NULL);
 
     sGetCurrentPosition = env->GetMethodID(env->GetObjectClass(mediaRender), "getCurrentPosition", "()I");
-    YFATAL_IF(sGetCurrentPosition == NULL);
+    FATAL_IF(sGetCurrentPosition == NULL);
 
     sGetDuration = env->GetMethodID(env->GetObjectClass(mediaRender), "getDuration", "()I");
-    YFATAL_IF(sGetDuration == NULL);
+    FATAL_IF(sGetDuration == NULL);
 
     sStop = env->GetMethodID(env->GetObjectClass(mediaRender), "stop", "()V");
-    YFATAL_IF(sStop == NULL);
+    FATAL_IF(sStop == NULL);
 
     sStart = env->GetMethodID(env->GetObjectClass(mediaRender), "start", "()V");
-    YFATAL_IF(sStop == NULL);
+    FATAL_IF(sStop == NULL);
 
     sPause = env->GetMethodID(env->GetObjectClass(mediaRender), "pause", "()V");
-    YFATAL_IF(sPause == NULL);
+    FATAL_IF(sPause == NULL);
 
     sSeek = env->GetMethodID(env->GetObjectClass(mediaRender), "seek", "(I)V");
-    YFATAL_IF(sSeek == NULL);
+    FATAL_IF(sSeek == NULL);
 
     jfieldID fieldId = env->GetStaticFieldID(env->GetObjectClass(mediaRender), "STATE_IDLE", "I");
     sPlayerState.idle = env->GetStaticIntField(env->GetObjectClass(mediaRender), fieldId);
@@ -608,10 +605,8 @@ static void nativeSetup(JNIEnv* env, jobject mediaRender)
 
 static void onStateChanged(JNIEnv* env, jobject jMediaRender, jint state)
 {
-    YLOGD("state:%d", state);
+    LOGD("state:%d", state);
     ((MediaRenderer*)(sMediaRender.AsPointer()))->OnStateChanged(state);
 }
 
-#ifdef __cplusplus
 } // extern "C"
-#endif

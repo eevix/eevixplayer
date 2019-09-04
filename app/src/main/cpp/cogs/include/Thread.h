@@ -37,5 +37,4 @@ private:
 };
 
 } // namespace eevix
-
 #endif // EEVIX_THREAD_H

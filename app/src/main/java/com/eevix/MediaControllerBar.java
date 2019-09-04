@@ -20,7 +20,7 @@ public class MediaControllerBar extends LinearLayout implements SeekBar.OnSeekBa
     private TextView mDurationView = null;
     private boolean mIsPlaying = false;
     private boolean mIsTouchingSeekBar = false;
-    private int mTouchProgress = 0;
+    private int mTouchedProgress = 0;
     private OnPlaybackControlListener mListener = null;
 
     public interface OnPlaybackControlListener {
@@ -96,10 +96,9 @@ public class MediaControllerBar extends LinearLayout implements SeekBar.OnSeekBa
 
     @Override
     public void onProgressChanged(SeekBar seekBar, int progress, boolean fromUser) {
-        Log.d(TAG, "onProgressChanged, progress:" + progress + ", fromUser:" + fromUser);
         mPositionView.setText(millisecondsToTime(progress));
         if (fromUser) {
-            mTouchProgress = progress;
+            mTouchedProgress = progress;
         }
     }
 
@@ -107,7 +106,7 @@ public class MediaControllerBar extends LinearLayout implements SeekBar.OnSeekBa
     public void onStartTrackingTouch(SeekBar seekBar) {
         Log.d(TAG, "onStartTrackingTouch");
         mIsTouchingSeekBar = true;
-        mTouchProgress = mSeekBar.getProgress();
+        mTouchedProgress = mSeekBar.getProgress();
     }
 
     @Override
@@ -115,7 +114,7 @@ public class MediaControllerBar extends LinearLayout implements SeekBar.OnSeekBa
         Log.d(TAG, "onStopTrackingTouch");
         mIsTouchingSeekBar = false;
         if (mListener != null) {
-            mListener.onSeek(mTouchProgress);
+            mListener.onSeek(mTouchedProgress);
         }
     }
 

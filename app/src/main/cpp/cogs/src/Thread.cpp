@@ -62,7 +62,7 @@ void Thread::requestExitAndWait()
 {
     AutoMutex lock(mLock);
 
-    YFATAL_IF(mRunning && mThreadID == pthread_self());
+    FATAL_IF(mRunning && mThreadID == pthread_self());
 
     while (mRunning)
     {

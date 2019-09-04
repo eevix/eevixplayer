@@ -14,12 +14,12 @@ public:
     ~Mutex();
     void lock();
     void unlock();
-    class Autolock
+    class AutoLock
     {
     public:
-        inline Autolock(Mutex& mutex) : mLock(mutex)  { mLock.lock(); }
-        inline Autolock(Mutex* mutex) : mLock(*mutex) { mLock.lock(); }
-        inline ~Autolock() { mLock.unlock(); }
+        inline AutoLock(Mutex& mutex) : mLock(mutex)  { mLock.lock(); }
+        inline AutoLock(Mutex* mutex) : mLock(*mutex) { mLock.lock(); }
+        inline ~AutoLock() { mLock.unlock(); }
     private:
         Mutex& mLock;
     };
@@ -27,7 +27,7 @@ public:
 private:
     friend class Condition;
     Mutex(const Mutex&);
-    Mutex& operator = (const Mutex&);
+    Mutex& operator= (const Mutex&);
     pthread_mutex_t mMutex;
 };
 
@@ -51,7 +51,7 @@ inline void Mutex::unlock()
     pthread_mutex_unlock(&mMutex);
 }
 
-typedef Mutex::Autolock AutoMutex;
-};
+typedef Mutex::AutoLock AutoMutex;
 
+}
 #endif // EEVIX_MUTEX

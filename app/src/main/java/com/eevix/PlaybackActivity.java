@@ -26,7 +26,7 @@ public class PlaybackActivity extends Activity {
     private Handler         mMainHandler;
     private Handler         mPlayerHandler;
     private HandlerThread   mPlayerHandlerThread;
-    private PlayerListener  mPlayerListener;
+    private MediaPlayerListener mMediaPlayerListener;
     private MediaControllerBar mMediaControllerBar;
     private boolean         mSurfaceValid = false;
     private int             mVideoWidth = 0;
@@ -47,32 +47,37 @@ public class PlaybackActivity extends Activity {
 
         @Override
         public void setDataSource(String url) {
-            Log.d(TAG, "Controller setDataSource:" + url);
+            Log.d(TAG, "Controller: setDataSource:" + url);
             mPlayerHandler.obtainMessage(MessageType.SET_DATA_SOURCE.value(), url).sendToTarget();
         }
 
         @Override
         public void start() {
+            Log.d(TAG, "Controller: start");
             mPlayerHandler.sendEmptyMessage(MessageType.START.value());
         }
 
         @Override
         public void pause() {
+            Log.d(TAG, "Controller: pause");
             mPlayerHandler.sendEmptyMessage(MessageType.PAUSE.value());
         }
 
         @Override
         public void resume() {
+            Log.d(TAG, "Controller: resume");
             mPlayerHandler.sendEmptyMessage(MessageType.START.value());
         }
 
         @Override
         public void stop() {
+            Log.d(TAG, "Controller: stop");
             mPlayerHandler.sendEmptyMessage(MessageType.STOP.value());
         }
 
         @Override
         public void seek(int millisecond) {
+            Log.d(TAG, "Controller: seek:" + millisecond);
             mPlayerHandler.removeMessages(MessageType.UPDATE.value());
             mPlayerHandler.obtainMessage(MessageType.SEEK.value(), millisecond, 0).sendToTarget();
             mMainHandler.removeMessages(MessageType.UPDATE.value());
@@ -83,7 +88,6 @@ public class PlaybackActivity extends Activity {
             MessageReply<Integer> reply = new MessageReply<>();
             mPlayerHandler.obtainMessage(MessageType.GET_CURRENT_POSITION.value(), reply).sendToTarget();
             reply.waitReply();
-            Log.d(TAG, "getCurrentPosition:" + reply.getData());
             return reply.getData();
         }
 
@@ -92,7 +96,7 @@ public class PlaybackActivity extends Activity {
             MessageReply<Integer> reply = new MessageReply<>();
             mPlayerHandler.obtainMessage(MessageType.GET_DURATION.value(), reply).sendToTarget();
             reply.waitReply();
-            Log.d(TAG, "getDuration:" + reply.getData());
+            Log.d(TAG, "Controller: getDuration:" + reply.getData());
             return reply.getData();
         }
 
@@ -118,6 +122,7 @@ public class PlaybackActivity extends Activity {
         }
 
         void changeState(int state) {
+            Log.d(TAG, "Controller: changeState:" + state);
             if (mStateChangedListener != null) {
                 mStateChangedListener.onStateChanged(state);
             }
@@ -161,48 +166,48 @@ public class PlaybackActivity extends Activity {
     private class SurfaceHolderCallback implements SurfaceHolder.Callback {
         @Override
         public void surfaceCreated(SurfaceHolder holder) {
-            Log.d(TAG, "surfaceCreated");
+            Log.d(TAG, "SurfaceHolderCallback: surfaceCreated");
             mPlayerHandler.sendEmptyMessage(MessageType.SURFACE_CREATED.value());
         }
 
         @Override
         public void surfaceChanged(SurfaceHolder holder, int format, int width, int height) {
-            Log.d(TAG, "surfaceChanged, width:" + width + ", height:" + height);
+            Log.d(TAG, "SurfaceHolderCallback: surfaceChanged, width:" + width + ", height:" + height);
         }
 
         @Override
         public void surfaceDestroyed(SurfaceHolder holder) {
-            Log.d(TAG, "surfaceDestroyed");
+            Log.d(TAG, "SurfaceHolderCallback: surfaceDestroyed");
             mPlayerHandler.sendEmptyMessage(MessageType.SURFACE_DESTROYED.value());
         }
     }
 
-    private class PlayerListener implements MediaPlayer.OnPreparedListener,
+    private class MediaPlayerListener implements MediaPlayer.OnPreparedListener,
                                             MediaPlayer.OnCompletionListener,
                                             MediaPlayer.OnSeekCompleteListener,
                                             MediaPlayer.OnVideoSizeChangedListener {
         @Override
         public void onCompletion(MediaPlayer mp) {
-            Log.d(TAG, "PlayerListener onCompletion");
+            Log.d(TAG, "MediaPlayerListener: onCompletion");
             mPlayerHandler.sendEmptyMessage(MessageType.COMPLETED.value());
         }
 
         @Override
         public void onPrepared(MediaPlayer mp) {
-            Log.d(TAG, "PlayerListener onPrepared");
+            Log.d(TAG, "MediaPlayerListener: onPrepared");
             mPlayerHandler.sendEmptyMessage(MessageType.PREPARED.value());
         }
 
         @Override
         public void onSeekComplete(MediaPlayer mp) {
-            Log.d(TAG, "PlayerListener onSeekComplete");
+            Log.d(TAG, "MediaPlayerListener: onSeekComplete");
             mPlayerHandler.sendEmptyMessage(MessageType.UPDATE.value());
             mPlayerHandler.sendEmptyMessage(MessageType.START.value());
         }
 
         @Override
         public void onVideoSizeChanged(MediaPlayer mp, int width, int height) {
-            Log.d(TAG, "PlayerListener onVideoSizeChanged, width:" + width + ", height:" + height);
+            Log.d(TAG, "MediaPlayerListener: onVideoSizeChanged, width:" + width + ", height:" + height);
             Message message = mMainHandler.obtainMessage(MessageType.UPDATE_VIDEO_SIZE.value());
             Bundle bundle = new Bundle();
             bundle.putInt("video-width", width);
@@ -215,6 +220,7 @@ public class PlaybackActivity extends Activity {
     private class PlaybackControlListener implements MediaControllerBar.OnPlaybackControlListener {
         @Override
         public void onPlay(boolean play) {
+            Log.d(TAG, "PlaybackControlListener: onPlay:" + play);
             if (play) {
                 mController.start();
             } else {
@@ -224,6 +230,7 @@ public class PlaybackActivity extends Activity {
 
         @Override
         public void onSeek(int position) {
+            Log.d(TAG, "PlaybackControlListener: onSeek:" + position);
             mController.seek(position);
         }
     }
@@ -254,7 +261,7 @@ public class PlaybackActivity extends Activity {
             }
         });
         mSurfaceView.getHolder().addCallback(new SurfaceHolderCallback());
-        mPlayerListener = new PlayerListener();
+        mMediaPlayerListener = new MediaPlayerListener();
         mPlayerHandlerThread = new HandlerThread("playerThread");
         mMainHandler.sendEmptyMessageDelayed(MessageType.HIDE_CONTROLLER_BAR.value(), mMediaControllerBarVisibleTime);
 
@@ -389,7 +396,11 @@ public class PlaybackActivity extends Activity {
         if (message == null) {
             return false;
         }
-        Log.d(TAG, "handleMainThreadMessage:" + message);
+
+        if (message != MessageType.UPDATE) {
+            Log.d(TAG, "handleMainThreadMessage:" + message);
+        }
+
         switch (message) {
             case PAUSED: {
                 mMediaControllerBar.setIsPlaying(false);
@@ -432,12 +443,14 @@ public class PlaybackActivity extends Activity {
                     mVideoHeight = bundle.getInt("video-height");
                 }
 
+                Log.d(TAG, "mVideoWidth:" + mVideoWidth + ", mVideoHeight:" + mVideoHeight);
+
                 if (mVideoWidth <= 0 || mVideoHeight <= 0) {
                     mSurfaceView.getHolder().setSizeFromLayout();
-                }  else if (mVideoWidth / mVideoHeight > mDisplayLayout.getMeasuredWidth() / mDisplayLayout.getMeasuredHeight()) {
-                    mSurfaceView.getHolder().setFixedSize(mDisplayLayout.getMeasuredWidth(), mDisplayLayout.getMeasuredWidth() * mVideoHeight / mVideoWidth);
+                } else if (mVideoWidth * mDisplayLayout.getMeasuredHeight() > mVideoHeight * mDisplayLayout.getMeasuredWidth()) {
+                    mSurfaceView.getHolder().setFixedSize(mDisplayLayout.getMeasuredWidth(), mDisplayLayout.getMeasuredWidth() * mVideoHeight * 100 / mVideoWidth / 100);
                 } else {
-                    mSurfaceView.getHolder().setFixedSize(mDisplayLayout.getMeasuredHeight() * mVideoWidth / mVideoHeight, mDisplayLayout.getMeasuredHeight());
+                    mSurfaceView.getHolder().setFixedSize(mDisplayLayout.getMeasuredHeight() * mVideoWidth * 100 / mVideoHeight / 100, mDisplayLayout.getMeasuredHeight());
                 }
 
                 break;
@@ -456,12 +469,18 @@ public class PlaybackActivity extends Activity {
     }
 
     private void handlePlayerThreadMessage(Message msg) {
-        MessageType messageType = MessageType.valueOf(msg.what);
-        if (messageType == null) {
+        MessageType message = MessageType.valueOf(msg.what);
+        if (message == null) {
             return;
         }
 
-        switch (messageType) {
+        if (message != MessageType.UPDATE
+            && message != MessageType.GET_CURRENT_POSITION
+            && message != MessageType.QUERY_STATE) {
+            Log.d(TAG, "handlePlayerThreadMessage:" + message);
+        }
+
+        switch (message) {
             case SET_DATA_SOURCE: {
                 if (msg.obj instanceof String) {
                     play((String)msg.obj);
@@ -469,7 +488,6 @@ public class PlaybackActivity extends Activity {
                 break;
             }
             case START: {
-                Log.d(TAG, "handle message:START");
                 if (mMediaPlayer != null && mState == PlayerState.PAUSED) {
                     try {
                         mMediaPlayer.start();
@@ -520,7 +538,6 @@ public class PlaybackActivity extends Activity {
 
                 MessageReply<Integer> reply = ((MessageReply<Integer>) msg.obj);
                 reply.setData(position);
-                Log.d(TAG, "GET_CURRENT_POSITION position:" + position);
                 reply.notifyReply();
                 break;
             }
@@ -548,13 +565,13 @@ public class PlaybackActivity extends Activity {
                         mMediaPlayer.start();
                         Log.e(TAG, "mMediaPlayer.start()");
                         changeState(PlayerState.PLAYING);
-                        Message message = mMainHandler.obtainMessage(MessageType.STARTED.value());
+                        Message message1 = mMainHandler.obtainMessage(MessageType.STARTED.value());
                         Bundle bundle = new Bundle();
                         bundle.putInt("duration", mMediaPlayer.getDuration());
                         bundle.putInt("video-width", mMediaPlayer.getVideoWidth());
                         bundle.putInt("video-height", mMediaPlayer.getVideoHeight());
-                        message.setData(bundle);
-                        message.sendToTarget();
+                        message1.setData(bundle);
+                        message1.sendToTarget();
                         mPlayerHandler.sendEmptyMessage(MessageType.UPDATE.value());
                     }
                 } catch (Exception exception) {
@@ -569,7 +586,6 @@ public class PlaybackActivity extends Activity {
                 break;
             }
             case SURFACE_CREATED: {
-                Log.e(TAG, "SURFACE_CREATED");
                 mSurfaceValid = true;
                 if (mMediaPlayer != null) {
                     Log.e(TAG, "mMediaPlayer.setDisplay()");
@@ -578,7 +594,6 @@ public class PlaybackActivity extends Activity {
                 break;
             }
             case SURFACE_DESTROYED: {
-                Log.e(TAG, "SURFACE_DESTROYED");
                 mSurfaceValid = false;
                 stop();
                 mMainHandler.removeMessages(MessageType.UPDATE.value());
@@ -587,11 +602,11 @@ public class PlaybackActivity extends Activity {
             case UPDATE: {
                 if (mMediaPlayer != null) {
                     if (mMediaPlayer.isPlaying()) {
-                        Message message = mMainHandler.obtainMessage(MessageType.UPDATE.value());
+                        Message message1 = mMainHandler.obtainMessage(MessageType.UPDATE.value());
                         Bundle bundle = new Bundle();
                         bundle.putInt("currentTime", mMediaPlayer.getCurrentPosition());
-                        message.setData(bundle);
-                        message.sendToTarget();
+                        message1.setData(bundle);
+                        message1.sendToTarget();
                         mPlayerHandler.removeMessages(MessageType.UPDATE.value());
                         mPlayerHandler.sendEmptyMessageDelayed(MessageType.UPDATE.value(), 500);
                     }
@@ -600,12 +615,12 @@ public class PlaybackActivity extends Activity {
             }
             case UPDATE_VIDEO_SIZE: {
                 if (mMediaPlayer != null && mMediaPlayer.isPlaying()) {
-                    Message message = mMainHandler.obtainMessage(MessageType.UPDATE_VIDEO_SIZE.value());
+                    Message message1 = mMainHandler.obtainMessage(MessageType.UPDATE_VIDEO_SIZE.value());
                     Bundle bundle = new Bundle();
                     bundle.putInt("video-width", mMediaPlayer.getVideoWidth());
                     bundle.putInt("video-height", mMediaPlayer.getVideoHeight());
-                    message.setData(bundle);
-                    message.sendToTarget();
+                    message1.setData(bundle);
+                    message1.sendToTarget();
                 }
                 break;
             }
@@ -625,10 +640,10 @@ public class PlaybackActivity extends Activity {
         stop();
 
         mMediaPlayer = new MediaPlayer();
-        mMediaPlayer.setOnPreparedListener(mPlayerListener);
-        mMediaPlayer.setOnCompletionListener(mPlayerListener);
-        mMediaPlayer.setOnSeekCompleteListener(mPlayerListener);
-        mMediaPlayer.setOnVideoSizeChangedListener(mPlayerListener);
+        mMediaPlayer.setOnPreparedListener(mMediaPlayerListener);
+        mMediaPlayer.setOnCompletionListener(mMediaPlayerListener);
+        mMediaPlayer.setOnSeekCompleteListener(mMediaPlayerListener);
+        mMediaPlayer.setOnVideoSizeChangedListener(mMediaPlayerListener);
         mMediaPlayer.setScreenOnWhilePlaying(true);
 
         try {
