@@ -63,8 +63,25 @@ public class DLNAMediaRender extends Service {
 
     @Override
     public int onStartCommand(Intent intent, int flags, int startId) {
-        Log.d(TAG, "onStartCommand:" + intent.toString() + ", flags:" + flags + ", startId:" + startId);
+        Log.d(TAG, "onStartCommand:" + (intent == null ? "null" : intent) + ", flags:" + flags + ", startId:" + startId);
         return super.onStartCommand(intent, flags, startId);
+    }
+
+    @Override
+    public boolean onUnbind(Intent intent) {
+        Log.d(TAG, "onUnbind:" + (intent == null ? "null" : intent));
+        super.onUnbind(intent);
+        synchronized (this) {
+            mPlaybackController = null;
+            onStateChanged(STATE_IDLE);
+        }
+        return true;
+    }
+
+    @Override
+    public void onDestroy() {
+        super.onDestroy();
+        Log.d(TAG, "onDestroy");
     }
 
     private synchronized boolean setDataSource(String url) {

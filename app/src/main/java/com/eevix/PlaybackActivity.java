@@ -17,9 +17,10 @@ import android.view.SurfaceView;
 import android.view.View;
 
 public class PlaybackActivity extends Activity {
-    private static final String TAG = "PlaybackActivity";
+    private String TAG = "PlaybackActivity";
     private static final int mMediaControllerBarVisibleTime = 5000; // ms
     private String          mUrl;
+    private int             mLastPosition = 0;
     private SurfaceView     mSurfaceView;
     private View            mDisplayLayout;
     private MediaPlayer     mMediaPlayer;
@@ -32,6 +33,7 @@ public class PlaybackActivity extends Activity {
     private int             mVideoWidth = 0;
     private int             mVideoHeight = 0;
     private DLNAMediaRender.PlaybackControllerRegister mPlaybackControllerRegister;
+    private DLNAMediaRenderConnection mDLNAMediaRenderConnection = null;
     private Controller      mController = new Controller();
     private PlayerState     mState = PlayerState.IDLE;
 
@@ -123,8 +125,9 @@ public class PlaybackActivity extends Activity {
 
         void changeState(int state) {
             Log.d(TAG, "Controller: changeState:" + state);
-            if (mStateChangedListener != null) {
-                mStateChangedListener.onStateChanged(state);
+            StateChangedListener listener = mStateChangedListener;
+            if (listener != null) {
+                listener.onStateChanged(state);
             }
         }
     }
@@ -195,7 +198,7 @@ public class PlaybackActivity extends Activity {
         @Override
         public void onPrepared(MediaPlayer mp) {
             Log.d(TAG, "MediaPlayerListener: onPrepared");
-            mPlayerHandler.sendEmptyMessage(MessageType.PREPARED.value());
+            mPlayerHandler.obtainMessage(MessageType.PREPARED.value(), mp).sendToTarget();
         }
 
         @Override
@@ -235,8 +238,39 @@ public class PlaybackActivity extends Activity {
         }
     }
 
+    private class DLNAMediaRenderConnection implements ServiceConnection {
+        @Override
+        public void onServiceConnected(ComponentName name, IBinder service) {
+            Log.d(TAG, "DLNAMediaRenderConnection: onServiceConnected, name:" + name + ", service:" + service);
+            if (service instanceof DLNAMediaRender.PlaybackControllerRegister) {
+                mPlaybackControllerRegister = (DLNAMediaRender.PlaybackControllerRegister) service;
+                mPlaybackControllerRegister.registerPlayerBackController(mController);
+            }
+        }
+
+        @Override
+        public void onServiceDisconnected(ComponentName name) {
+            Log.d(TAG, "DLNAMediaRenderConnection: onServiceDisconnected, name:" + name);
+            mController.setStateChangedListener(null);
+            mController.stop();
+        }
+
+        @Override
+        public void onBindingDied(ComponentName name) {
+            Log.d(TAG, "DLNAMediaRenderConnection: onBindingDied, name:" + name);
+            mController.setStateChangedListener(null);
+            mController.stop();
+        }
+
+        @Override
+        public void onNullBinding(ComponentName name) {
+            Log.d(TAG, "DLNAMediaRenderConnection: onNullBinding, name:" + name);
+        }
+    }
+
     @Override
     protected void onCreate(Bundle savedInstanceState) {
+        TAG += "@" + hashCode();
         Log.d(TAG, "onCreate");
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_playback);
@@ -273,6 +307,8 @@ public class PlaybackActivity extends Activity {
                 handlePlayerThreadMessage(msg);
             }
         };
+        onIntent(getIntent());
+        setIntent(null);
     }
 
     @Override
@@ -296,7 +332,6 @@ public class PlaybackActivity extends Activity {
     protected void onStart() {
         Log.d(TAG, "onStart");
         super.onStart();
-        onIntent(getIntent());
     }
 
     @Override
@@ -304,9 +339,10 @@ public class PlaybackActivity extends Activity {
         Log.d(TAG, "onPause");
         super.onPause();
 
-        if (mPlaybackControllerRegister != null) {
-            mPlaybackControllerRegister.registerPlayerBackController(null);
-            mPlaybackControllerRegister = null;
+        if (mDLNAMediaRenderConnection != null) {
+            unbindService(mDLNAMediaRenderConnection);
+            mController.setStateChangedListener(null);
+            mDLNAMediaRenderConnection = null;
         }
 
         if (mPlayerHandler != null) {
@@ -324,6 +360,7 @@ public class PlaybackActivity extends Activity {
     protected void onRestart() {
         Log.d(TAG, "onRestart");
         super.onRestart();
+        mController.start();
     }
 
     @Override
@@ -349,6 +386,9 @@ public class PlaybackActivity extends Activity {
     }
 
     private void onIntent(Intent intent) {
+        if (intent == null) {
+            return;
+        }
         Log.d(TAG, "onIntent:" + intent);
         String action = intent.getAction();
         String data = intent.getDataString();
@@ -356,34 +396,12 @@ public class PlaybackActivity extends Activity {
 
         if (from !=null && from.equals("DLNAMediaRender")) {
             Intent intent2 = new Intent();
+            mDLNAMediaRenderConnection = new DLNAMediaRenderConnection();
             intent2.setClass(this, DLNAMediaRender.class);
-            bindService(intent2, new ServiceConnection() {
-                @Override
-                public void onServiceConnected(ComponentName name, IBinder service) {
-                    Log.d(TAG, "onServiceConnected, name:" + name + ", service:" + service);
-                    if (service instanceof DLNAMediaRender.PlaybackControllerRegister) {
-                        mPlaybackControllerRegister = (DLNAMediaRender.PlaybackControllerRegister) service;
-                        mPlaybackControllerRegister.registerPlayerBackController(mController);
-                    }
-                }
-
-                @Override
-                public void onServiceDisconnected(ComponentName name) {
-                    Log.d(TAG, "onServiceDisconnected, name:" + name);
-                    mController.stop();
-                }
-
-                @Override
-                public void onBindingDied(ComponentName name) {
-                    Log.d(TAG, "onBindingDied, name:" + name);
-                    mController.stop();
-                }
-
-                @Override
-                public void onNullBinding(ComponentName name) {
-                    Log.d(TAG, "onNullBinding, name:" + name);
-                }
-            }, BIND_AUTO_CREATE);
+            if (!bindService(intent2, mDLNAMediaRenderConnection, BIND_AUTO_CREATE)) {
+                Log.e(TAG, "bindService failed");
+                mDLNAMediaRenderConnection = null;
+            }
         }
 
         if (action != null && action.equals(Intent.ACTION_VIEW)) {
@@ -422,15 +440,14 @@ public class PlaybackActivity extends Activity {
                 mMediaControllerBar.reset();
                 mVideoWidth = 0;
                 mVideoHeight = 0;
-                mSurfaceView.getHolder().setSizeFromLayout();
                 break;
             }
             case UPDATE: {
                 Bundle bundle = msg.getData();
-                if (bundle.containsKey("currentTime")) {
-                    int currentTime = bundle.getInt("currentTime");
-                    if (currentTime >= 0) {
-                        mMediaControllerBar.setCurrentPosition(currentTime);
+                if (bundle.containsKey("position")) {
+                    int position = bundle.getInt("position");
+                    if (position >= 0) {
+                        mMediaControllerBar.setCurrentPosition(position);
                     }
                 }
                 break;
@@ -484,6 +501,7 @@ public class PlaybackActivity extends Activity {
             case SET_DATA_SOURCE: {
                 if (msg.obj instanceof String) {
                     play((String)msg.obj);
+                    mLastPosition = 0;
                 }
                 break;
             }
@@ -504,7 +522,7 @@ public class PlaybackActivity extends Activity {
             }
             case PAUSE: {
                 try {
-                    if (mMediaPlayer != null) {
+                    if (mState == PlayerState.PLAYING && mMediaPlayer != null) {
                         mMediaPlayer.pause();
                         mMainHandler.sendEmptyMessage(MessageType.PAUSED.value());
                         changeState(PlayerState.PAUSED);
@@ -515,6 +533,11 @@ public class PlaybackActivity extends Activity {
                 break;
             }
             case STOP: {
+                if (mState == PlayerState.PLAYING || mState == PlayerState.PAUSED) {
+                    mMediaPlayer.pause();
+                    mLastPosition = mMediaPlayer.getCurrentPosition();
+                    Log.d(TAG, "got last position:" + mLastPosition);
+                }
                 stop();
                 mMainHandler.sendEmptyMessage(MessageType.STOPPED.value());
                 mMainHandler.removeMessages(MessageType.UPDATE.value());
@@ -560,20 +583,25 @@ public class PlaybackActivity extends Activity {
                 break;
             }
             case PREPARED: {
+                if (mMediaPlayer != msg.obj || mMediaPlayer == null) {
+                    break;
+                }
                 try {
-                    if (mMediaPlayer != null) {
-                        mMediaPlayer.start();
-                        Log.e(TAG, "mMediaPlayer.start()");
-                        changeState(PlayerState.PLAYING);
-                        Message message1 = mMainHandler.obtainMessage(MessageType.STARTED.value());
-                        Bundle bundle = new Bundle();
-                        bundle.putInt("duration", mMediaPlayer.getDuration());
-                        bundle.putInt("video-width", mMediaPlayer.getVideoWidth());
-                        bundle.putInt("video-height", mMediaPlayer.getVideoHeight());
-                        message1.setData(bundle);
-                        message1.sendToTarget();
-                        mPlayerHandler.sendEmptyMessage(MessageType.UPDATE.value());
+                    if (mLastPosition > 0 && mLastPosition < mMediaPlayer.getDuration()) {
+                        Log.d(TAG, "seekTo last position:" + mLastPosition);
+                        mMediaPlayer.seekTo(mLastPosition);
                     }
+                    mMediaPlayer.start();
+                    Log.e(TAG, "mMediaPlayer.start()");
+                    changeState(PlayerState.PLAYING);
+                    Message message1 = mMainHandler.obtainMessage(MessageType.STARTED.value());
+                    Bundle bundle = new Bundle();
+                    bundle.putInt("duration", mMediaPlayer.getDuration());
+                    bundle.putInt("video-width", mMediaPlayer.getVideoWidth());
+                    bundle.putInt("video-height", mMediaPlayer.getVideoHeight());
+                    message1.setData(bundle);
+                    message1.sendToTarget();
+                    mPlayerHandler.sendEmptyMessage(MessageType.UPDATE.value());
                 } catch (Exception exception) {
                     Log.e(TAG, "exception:", exception);
                 }
@@ -581,6 +609,8 @@ public class PlaybackActivity extends Activity {
             }
             case COMPLETED: {
                 stop();
+                mLastPosition = 0;
+                Log.d(TAG, "reset last position:" + mLastPosition);
                 mMainHandler.sendEmptyMessage(MessageType.STOPPED.value());
                 mMainHandler.removeMessages(MessageType.UPDATE.value());
                 break;
@@ -595,6 +625,11 @@ public class PlaybackActivity extends Activity {
             }
             case SURFACE_DESTROYED: {
                 mSurfaceValid = false;
+                if (mState == PlayerState.PLAYING) {
+                    mMediaPlayer.pause();
+                    mLastPosition = mMediaPlayer.getCurrentPosition();
+                    Log.d(TAG, "got last position:" + mLastPosition);
+                }
                 stop();
                 mMainHandler.removeMessages(MessageType.UPDATE.value());
                 break;
@@ -604,7 +639,7 @@ public class PlaybackActivity extends Activity {
                     if (mMediaPlayer.isPlaying()) {
                         Message message1 = mMainHandler.obtainMessage(MessageType.UPDATE.value());
                         Bundle bundle = new Bundle();
-                        bundle.putInt("currentTime", mMediaPlayer.getCurrentPosition());
+                        bundle.putInt("position", mMediaPlayer.getCurrentPosition());
                         message1.setData(bundle);
                         message1.sendToTarget();
                         mPlayerHandler.removeMessages(MessageType.UPDATE.value());
@@ -660,6 +695,7 @@ public class PlaybackActivity extends Activity {
             Log.e(TAG, "exception:" + exception);
             mMediaPlayer.release();
         }
+
         mUrl = path;
     }
 
