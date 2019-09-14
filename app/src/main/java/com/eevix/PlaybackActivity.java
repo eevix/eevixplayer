@@ -10,6 +10,7 @@ import android.os.HandlerThread;
 import android.os.Bundle;
 import android.os.IBinder;
 import android.os.Message;
+import android.os.StrictMode;
 import android.util.Log;
 import android.view.MotionEvent;
 import android.view.SurfaceHolder;
@@ -17,7 +18,7 @@ import android.view.SurfaceView;
 import android.view.View;
 
 public class PlaybackActivity extends Activity {
-    private String TAG = "PlaybackActivity";
+    private static final String TAG = "PlaybackActivity";
     private static final int mMediaControllerBarVisibleTime = 5000; // ms
     private String          mUrl;
     private int             mLastPosition = 0;
@@ -270,7 +271,6 @@ public class PlaybackActivity extends Activity {
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
-        TAG += "@" + hashCode();
         Log.d(TAG, "onCreate");
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_playback);
@@ -620,6 +620,7 @@ public class PlaybackActivity extends Activity {
                 if (mMediaPlayer != null) {
                     Log.e(TAG, "mMediaPlayer.setDisplay()");
                     mMediaPlayer.setDisplay(mSurfaceView.getHolder());
+                    mMediaPlayer.setScreenOnWhilePlaying(true);
                 }
                 break;
             }
@@ -679,14 +680,14 @@ public class PlaybackActivity extends Activity {
         mMediaPlayer.setOnCompletionListener(mMediaPlayerListener);
         mMediaPlayer.setOnSeekCompleteListener(mMediaPlayerListener);
         mMediaPlayer.setOnVideoSizeChangedListener(mMediaPlayerListener);
-        mMediaPlayer.setScreenOnWhilePlaying(true);
 
         try {
-            Log.e(TAG, "mMediaPlayer.setDataSource()");
+            Log.e(TAG, "mMediaPlayer.setDataSource(" + path + ")");
             mMediaPlayer.setDataSource(path);
             if (mSurfaceValid) {
                 Log.e(TAG, "mMediaPlayer.setDisplay()");
                 mMediaPlayer.setDisplay(mSurfaceView.getHolder());
+                mMediaPlayer.setScreenOnWhilePlaying(true);
             }
             Log.e(TAG, "mMediaPlayer.prepareAsync()");
             mMediaPlayer.prepareAsync();

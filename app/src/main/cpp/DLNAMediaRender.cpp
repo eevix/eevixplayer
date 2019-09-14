@@ -13,7 +13,7 @@ using eevix::Thread;
 using eevix::Queue;
 using eevix::KeyedData;
 
-static void nativeInit(JNIEnv* env);
+static void nativeInit(JNIEnv* env, jclass, jstring friendlyName, jstring uuid);
 static void nativeSetup(JNIEnv* env, jobject JMediaRender);
 static void onStateChanged(JNIEnv* env, jobject JMediaRender, jint state);
 
@@ -37,6 +37,14 @@ static struct PlayerState {
     int paused;
     int playing;
 } sPlayerState;
+
+static class LogHandler : public NPT_LogHandler
+{
+public:
+    void Log(const NPT_LogRecord &record) override {
+        LOGD("%s", record.m_Message);
+    }
+} gLogHander;
 
 static inline char* formatTime(uint32_t time)
 {
@@ -509,7 +517,7 @@ jint JNI_OnLoad(JavaVM* vm, void* reserved)
 
     const JNINativeMethod nativeMethods[] =
     {
-            {"nativeInit",     "()V",                             (void*)nativeInit},
+            {"nativeInit",     "(Ljava/lang/String;Ljava/lang/String;)V",           (void*)nativeInit},
             {"nativeSetup",    "(Lcom/eevix/DLNAMediaRender;)V",  (void*)nativeSetup},
             {"onStateChanged", "(I)V",                            (void*)onStateChanged},
     };
@@ -531,9 +539,12 @@ jint JNI_OnLoad(JavaVM* vm, void* reserved)
     return JNI_VERSION_1_4;
 }
 
-static void nativeInit(JNIEnv* env)
+void nativeInit(JNIEnv* env, jclass DLNAMediaRenderClass, jstring friendlyName, jstring uuid)
 {
+    FATAL_IF(env == NULL || friendlyName == NULL || uuid == NULL);
     LOGD("env:%p", env);
+    LOGD("friendlyName:%s", env->GetStringUTFChars(friendlyName, NULL));
+    LOGD("uuid:%s", env->GetStringUTFChars(uuid, NULL));
 
     if (!sUPNPService.IsRunning())
     {
@@ -543,17 +554,18 @@ static void nativeInit(JNIEnv* env)
         NPT_Result ret = NPT_GetSystemLogConfig(logConfig);
         if (ret != NPT_SUCCESS)
         {
-            PLOGE("configure NPT log failed");
+            LOGE("configure NPT log failed");
         }
 
-        NPT_Logger* logger = NPT_LogManager::GetLogger("mylogger");
         NPT_LogManager& loggerManager = NPT_LogManager::GetDefault();
-        logger->AddHandler(&loggerHandle);
-        PLOGD("log level:%d IsEnabled:%d", logger->GetLevel(), loggerManager.IsEnabled());
+        loggerManager.Configure("plist:.level=ALL");
+        NPT_Logger* logger = NPT_LogManager::GetLogger("mylogger");
+        logger->AddHandler(&gLogHander);
+        LOGD("log level:%d IsEnabled:%d", logger->GetLevel(), loggerManager.IsEnabled());
 #endif
         /* start media render */
         FATAL_IF(!sMediaRender.IsNull());
-        sMediaRender = new MediaRenderer("eevix-media-render", false, "a6572b54-f3c7-2d91-2fb5-b757f2537e22");
+        sMediaRender = new MediaRenderer(env->GetStringUTFChars(friendlyName, NULL), false, env->GetStringUTFChars(uuid, NULL));
         sUPNPService.AddDevice(sMediaRender);
         sUPNPService.Start();
         LOGD("UPNP is running");

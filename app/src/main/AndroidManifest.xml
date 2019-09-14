@@ -8,14 +8,15 @@
 
     <application
         android:allowBackup="true"
-        android:icon="@mipmap/ic_launcher"
-        android:label="@string/app_name"
-        android:roundIcon="@mipmap/ic_launcher_round"
+        android:icon="@drawable/media_launcher"
         android:supportsRtl="true"
         android:theme="@android:style/Theme.Material.Light.NoActionBar.Fullscreen"
-        tools:targetApi="21">
+        tools:targetApi="21"
+        android:fullBackupContent="false"
+        android:usesCleartextTraffic="true">
         <activity
             android:name="com.eevix.PlaybackActivity"
+            android:icon="@drawable/media_launcher"
             android:label="@string/title_activity_player"
             android:configChanges="keyboardHidden|orientation|screenSize">
             <intent-filter>
@@ -25,8 +26,20 @@
 
             <intent-filter>
                 <action android:name="android.intent.action.VIEW" />
-                <data android:mimeType="video/*" />
+                <category android:name="android.intent.category.BROWSABLE" />
                 <category android:name="android.intent.category.DEFAULT" />
+                <data android:mimeType="video/*" android:scheme="http" />
+            </intent-filter>
+        </activity>
+
+        <activity
+            android:name="com.eevix.MainActivity"
+            android:icon="@drawable/media_launcher"
+            android:label="EevixDLNA">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+
+                <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
 
@@ -35,13 +48,7 @@
             android:enabled="true"
             android:exported="false" />
 
-        <activity android:name="com.eevix.MainActivity">
-            <intent-filter>
-                <action android:name="android.intent.action.MAIN" />
 
-                <category android:name="android.intent.category.LAUNCHER" />
-            </intent-filter>
-        </activity>
     </application>
 
 </manifest>

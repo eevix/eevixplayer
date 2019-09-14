@@ -4,8 +4,11 @@ import android.app.Service;
 import android.content.Intent;
 import android.net.Uri;
 import android.os.Binder;
+import android.os.Build;
 import android.os.IBinder;
 import android.util.Log;
+
+import java.util.UUID;
 
 import static android.content.Intent.ACTION_VIEW;
 import static android.content.Intent.FLAG_ACTIVITY_NEW_TASK;
@@ -18,13 +21,13 @@ public class DLNAMediaRender extends Service {
     private static final int STATE_PLAYING = PlaybackController.STATE_PLAYING;
     private PlaybackController mPlaybackController = null;
 
-    private static native void nativeInit();
+    private static native void nativeInit(String friendlyName, String uuid);
     private native void nativeSetup(DLNAMediaRender dlnaMediaRender);
     private native void onStateChanged(int state);
 
     static {
         System.loadLibrary("dlnamediarender");
-        nativeInit();
+        nativeInit(Build.MANUFACTURER + "-" + Build.MODEL, UUID.randomUUID().toString());
     }
 
     class PlaybackControllerRegister extends Binder {
