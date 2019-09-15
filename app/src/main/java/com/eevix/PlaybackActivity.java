@@ -10,7 +10,6 @@ import android.os.HandlerThread;
 import android.os.Bundle;
 import android.os.IBinder;
 import android.os.Message;
-import android.os.StrictMode;
 import android.util.Log;
 import android.view.MotionEvent;
 import android.view.SurfaceHolder;
@@ -25,14 +24,11 @@ public class PlaybackActivity extends Activity {
     private SurfaceView     mSurfaceView;
     private View            mDisplayLayout;
     private MediaPlayer     mMediaPlayer;
-    private Handler         mMainHandler;
     private Handler         mPlayerHandler;
     private HandlerThread   mPlayerHandlerThread;
     private MediaPlayerListener mMediaPlayerListener;
     private MediaControllerBar mMediaControllerBar;
     private boolean         mSurfaceValid = false;
-    private int             mVideoWidth = 0;
-    private int             mVideoHeight = 0;
     private DLNAMediaRender.PlaybackControllerRegister mPlaybackControllerRegister;
     private DLNAMediaRenderConnection mDLNAMediaRenderConnection = null;
     private Controller      mController = new Controller();
@@ -81,9 +77,7 @@ public class PlaybackActivity extends Activity {
         @Override
         public void seek(int millisecond) {
             Log.d(TAG, "Controller: seek:" + millisecond);
-            mPlayerHandler.removeMessages(MessageType.UPDATE.value());
             mPlayerHandler.obtainMessage(MessageType.SEEK.value(), millisecond, 0).sendToTarget();
-            mMainHandler.removeMessages(MessageType.UPDATE.value());
         }
 
         @Override
@@ -146,13 +140,10 @@ public class PlaybackActivity extends Activity {
         COMPLETED,
         SURFACE_CREATED,
         SURFACE_DESTROYED,
-        PAUSED,
-        STARTED,
-        STOPPED,
-        UPDATE,
-        UPDATE_VIDEO_SIZE,
         SHOW_CONTROLLER_BAR,
-        HIDE_CONTROLLER_BAR;
+        HIDE_CONTROLLER_BAR,
+        UPDATE,
+        UPDATE_DISPLAY_REGION;
 
         public int value() {
             return ordinal();
@@ -187,9 +178,9 @@ public class PlaybackActivity extends Activity {
     }
 
     private class MediaPlayerListener implements MediaPlayer.OnPreparedListener,
-                                            MediaPlayer.OnCompletionListener,
-                                            MediaPlayer.OnSeekCompleteListener,
-                                            MediaPlayer.OnVideoSizeChangedListener {
+                                                 MediaPlayer.OnCompletionListener,
+                                                 MediaPlayer.OnSeekCompleteListener,
+                                                 MediaPlayer.OnVideoSizeChangedListener {
         @Override
         public void onCompletion(MediaPlayer mp) {
             Log.d(TAG, "MediaPlayerListener: onCompletion");
@@ -205,19 +196,13 @@ public class PlaybackActivity extends Activity {
         @Override
         public void onSeekComplete(MediaPlayer mp) {
             Log.d(TAG, "MediaPlayerListener: onSeekComplete");
-            mPlayerHandler.sendEmptyMessage(MessageType.UPDATE.value());
             mPlayerHandler.sendEmptyMessage(MessageType.START.value());
         }
 
         @Override
         public void onVideoSizeChanged(MediaPlayer mp, int width, int height) {
             Log.d(TAG, "MediaPlayerListener: onVideoSizeChanged, width:" + width + ", height:" + height);
-            Message message = mMainHandler.obtainMessage(MessageType.UPDATE_VIDEO_SIZE.value());
-            Bundle bundle = new Bundle();
-            bundle.putInt("video-width", width);
-            bundle.putInt("video-height", height);
-            message.setData(bundle);
-            message.sendToTarget();
+            mPlayerHandler.obtainMessage(MessageType.UPDATE_DISPLAY_REGION.value(), width, height).sendToTarget();
         }
     }
 
@@ -281,30 +266,24 @@ public class PlaybackActivity extends Activity {
             public void onLayoutChange(View v, int left, int top, int right, int bottom, int oldLeft, int oldTop, int oldRight, int oldBottom) {
                 if (left != oldLeft || top != oldTop || right != oldRight || bottom != oldBottom) {
                     Log.d(TAG, "onLayoutChange view:" + v + ", left:" + left + ", top:" + top + ", right:" + right + ", bottom:" + bottom);
-                    mMainHandler.sendEmptyMessage(MessageType.UPDATE_VIDEO_SIZE.value());
+                    mPlayerHandler.sendEmptyMessage(MessageType.UPDATE_DISPLAY_REGION.value());
                 }
             }
         });
         mMediaControllerBar = findViewById(R.id.media_controller_bar);
         mMediaControllerBar.setVisibility(View.VISIBLE);
         mMediaControllerBar.setListener(new PlaybackControlListener());
-        mMainHandler = new Handler(new Handler.Callback() {
-            @Override
-            public boolean handleMessage(Message msg) {
-                return handleMainThreadMessage(msg);
-            }
-        });
+
         mSurfaceView.getHolder().addCallback(new SurfaceHolderCallback());
         mMediaPlayerListener = new MediaPlayerListener();
         mPlayerHandlerThread = new HandlerThread("playerThread");
-        mMainHandler.sendEmptyMessageDelayed(MessageType.HIDE_CONTROLLER_BAR.value(), mMediaControllerBarVisibleTime);
 
         mPlayerHandlerThread.start();
         mPlayerHandler = new Handler(mPlayerHandlerThread.getLooper()) {
             @Override
             public void handleMessage(Message msg) {
                 super.handleMessage(msg);
-                handlePlayerThreadMessage(msg);
+                PlaybackActivity.this.handleMessage(msg);
             }
         };
         onIntent(getIntent());
@@ -314,17 +293,9 @@ public class PlaybackActivity extends Activity {
     @Override
     public boolean dispatchTouchEvent(MotionEvent ev) {
         if (ev.getActionMasked() == MotionEvent.ACTION_DOWN || ev.getActionMasked() == MotionEvent.ACTION_MOVE) {
-            mMainHandler.removeMessages(MessageType.HIDE_CONTROLLER_BAR.value());
-
-            if (mMediaControllerBar.getVisibility() != View.VISIBLE) {
-                mPlayerHandler.sendEmptyMessage(MessageType.UPDATE.value());
-                mMediaControllerBar.setVisibility(View.VISIBLE);
-                return true;
-            }
-        } else {
-            mMainHandler.removeMessages(MessageType.HIDE_CONTROLLER_BAR.value());
-            mMainHandler.sendEmptyMessageDelayed(MessageType.HIDE_CONTROLLER_BAR.value(), mMediaControllerBarVisibleTime);
+            mPlayerHandler.sendEmptyMessage(MessageType.SHOW_CONTROLLER_BAR.value());
         }
+
         return super.dispatchTouchEvent(ev);
     }
 
@@ -409,83 +380,7 @@ public class PlaybackActivity extends Activity {
         }
     }
 
-    private boolean handleMainThreadMessage(Message msg) {
-        MessageType message = MessageType.valueOf(msg.what);
-        if (message == null) {
-            return false;
-        }
-
-        if (message != MessageType.UPDATE) {
-            Log.d(TAG, "handleMainThreadMessage:" + message);
-        }
-
-        switch (message) {
-            case PAUSED: {
-                mMediaControllerBar.setIsPlaying(false);
-                break;
-            }
-            case STARTED: {
-                mMediaControllerBar.setIsPlaying(true);
-                Bundle bundle = msg.getData();
-                if (bundle.containsKey("duration")) {
-                    int duration = bundle.getInt("duration");
-                    Log.d(TAG, "duration:" + duration);
-                    if (duration >= 0) {
-                        mMediaControllerBar.setDuration(duration);
-                    }
-                }
-                break;
-            }
-            case STOPPED: {
-                mMediaControllerBar.reset();
-                mVideoWidth = 0;
-                mVideoHeight = 0;
-                break;
-            }
-            case UPDATE: {
-                Bundle bundle = msg.getData();
-                if (bundle.containsKey("position")) {
-                    int position = bundle.getInt("position");
-                    if (position >= 0) {
-                        mMediaControllerBar.setCurrentPosition(position);
-                    }
-                }
-                break;
-            }
-            case UPDATE_VIDEO_SIZE: {
-                Bundle bundle = msg.getData();
-
-                if (bundle.containsKey("video-width") && bundle.containsKey("video-height")) {
-                    mVideoWidth = bundle.getInt("video-width");
-                    mVideoHeight = bundle.getInt("video-height");
-                }
-
-                Log.d(TAG, "mVideoWidth:" + mVideoWidth + ", mVideoHeight:" + mVideoHeight);
-
-                if (mVideoWidth <= 0 || mVideoHeight <= 0) {
-                    mSurfaceView.getHolder().setSizeFromLayout();
-                } else if (mVideoWidth * mDisplayLayout.getMeasuredHeight() > mVideoHeight * mDisplayLayout.getMeasuredWidth()) {
-                    mSurfaceView.getHolder().setFixedSize(mDisplayLayout.getMeasuredWidth(), mDisplayLayout.getMeasuredWidth() * mVideoHeight * 100 / mVideoWidth / 100);
-                } else {
-                    mSurfaceView.getHolder().setFixedSize(mDisplayLayout.getMeasuredHeight() * mVideoWidth * 100 / mVideoHeight / 100, mDisplayLayout.getMeasuredHeight());
-                }
-
-                break;
-            }
-            case HIDE_CONTROLLER_BAR: {
-                mMediaControllerBar.setVisibility(View.GONE);
-                mPlayerHandler.removeMessages(MessageType.UPDATE.value());
-                break;
-            }
-            default: {
-                break;
-            }
-        }
-
-        return true;
-    }
-
-    private void handlePlayerThreadMessage(Message msg) {
+    private void handleMessage(Message msg) {
         MessageType message = MessageType.valueOf(msg.what);
         if (message == null) {
             return;
@@ -494,85 +389,39 @@ public class PlaybackActivity extends Activity {
         if (message != MessageType.UPDATE
             && message != MessageType.GET_CURRENT_POSITION
             && message != MessageType.QUERY_STATE) {
-            Log.d(TAG, "handlePlayerThreadMessage:" + message);
+            Log.d(TAG, "handleMessage:" + message);
         }
 
         switch (message) {
             case SET_DATA_SOURCE: {
-                if (msg.obj instanceof String) {
-                    play((String)msg.obj);
-                    mLastPosition = 0;
-                }
+                setDataSourceAndPrepare((String) msg.obj);
                 break;
             }
             case START: {
-                if (mMediaPlayer != null && mState == PlayerState.PAUSED) {
-                    try {
-                        mMediaPlayer.start();
-                        mMainHandler.sendEmptyMessage(MessageType.STARTED.value());
-                        mPlayerHandler.sendEmptyMessage(MessageType.UPDATE.value());
-                        changeState(PlayerState.PLAYING);
-                    } catch (Exception exception) {
-                        Log.e(TAG, "exception:", exception);
-                    }
-                } else if (mUrl != null && mState == PlayerState.IDLE) {
-                    play(mUrl);
-                }
+                start();
                 break;
             }
             case PAUSE: {
-                try {
-                    if (mState == PlayerState.PLAYING && mMediaPlayer != null) {
-                        mMediaPlayer.pause();
-                        mMainHandler.sendEmptyMessage(MessageType.PAUSED.value());
-                        changeState(PlayerState.PAUSED);
-                    }
-                } catch (Exception exception) {
-                    Log.e(TAG, "exception:", exception);
-                }
+                pause();
                 break;
             }
             case STOP: {
-                if (mState == PlayerState.PLAYING || mState == PlayerState.PAUSED) {
-                    mMediaPlayer.pause();
-                    mLastPosition = mMediaPlayer.getCurrentPosition();
-                    Log.d(TAG, "got last position:" + mLastPosition);
-                }
                 stop();
-                mMainHandler.sendEmptyMessage(MessageType.STOPPED.value());
-                mMainHandler.removeMessages(MessageType.UPDATE.value());
                 break;
             }
             case SEEK: {
-                try {
-                    if (mMediaPlayer != null && (mState == PlayerState.PLAYING || mState == PlayerState.PAUSED)) {
-                        mMediaPlayer.seekTo(msg.arg1);
-                    }
-                } catch (Exception exception) {
-                    Log.e(TAG, "exception:", exception);
-                }
+                seekTo(msg.arg1);
                 break;
             }
             case GET_CURRENT_POSITION: {
-                int position = 0;
-                if (mMediaPlayer != null) {
-                    position = mMediaPlayer.getCurrentPosition();
-                }
-
                 MessageReply<Integer> reply = ((MessageReply<Integer>) msg.obj);
-                reply.setData(position);
+                reply.setData(getCurrentPosition());
                 reply.notifyReply();
                 break;
             }
             case GET_DURATION: {
-                int duration = 0;
-                if (mMediaPlayer != null) {
-                    duration = mMediaPlayer.getDuration();
-                }
-
                 MessageReply<Integer> reply = ((MessageReply<Integer>) msg.obj);
-                reply.setData(duration);
-                Log.d(TAG, "GET_DURATION duration:" + duration);
+                reply.setData(getDuration());
                 reply.notifyReply();
                 break;
             }
@@ -583,81 +432,35 @@ public class PlaybackActivity extends Activity {
                 break;
             }
             case PREPARED: {
-                if (mMediaPlayer != msg.obj || mMediaPlayer == null) {
-                    break;
-                }
-                try {
-                    if (mLastPosition > 0 && mLastPosition < mMediaPlayer.getDuration()) {
-                        Log.d(TAG, "seekTo last position:" + mLastPosition);
-                        mMediaPlayer.seekTo(mLastPosition);
-                    }
-                    mMediaPlayer.start();
-                    Log.e(TAG, "mMediaPlayer.start()");
-                    changeState(PlayerState.PLAYING);
-                    Message message1 = mMainHandler.obtainMessage(MessageType.STARTED.value());
-                    Bundle bundle = new Bundle();
-                    bundle.putInt("duration", mMediaPlayer.getDuration());
-                    bundle.putInt("video-width", mMediaPlayer.getVideoWidth());
-                    bundle.putInt("video-height", mMediaPlayer.getVideoHeight());
-                    message1.setData(bundle);
-                    message1.sendToTarget();
-                    mPlayerHandler.sendEmptyMessage(MessageType.UPDATE.value());
-                } catch (Exception exception) {
-                    Log.e(TAG, "exception:", exception);
-                }
+                onPrepared((MediaPlayer) msg.obj);
                 break;
             }
             case COMPLETED: {
-                stop();
-                mLastPosition = 0;
-                Log.d(TAG, "reset last position:" + mLastPosition);
-                mMainHandler.sendEmptyMessage(MessageType.STOPPED.value());
-                mMainHandler.removeMessages(MessageType.UPDATE.value());
+                onCompleted();
                 break;
             }
             case SURFACE_CREATED: {
-                mSurfaceValid = true;
-                if (mMediaPlayer != null) {
-                    Log.e(TAG, "mMediaPlayer.setDisplay()");
-                    mMediaPlayer.setDisplay(mSurfaceView.getHolder());
-                    mMediaPlayer.setScreenOnWhilePlaying(true);
-                }
+                onSurfaceCreated();
                 break;
             }
             case SURFACE_DESTROYED: {
-                mSurfaceValid = false;
-                if (mState == PlayerState.PLAYING) {
-                    mMediaPlayer.pause();
-                    mLastPosition = mMediaPlayer.getCurrentPosition();
-                    Log.d(TAG, "got last position:" + mLastPosition);
-                }
-                stop();
-                mMainHandler.removeMessages(MessageType.UPDATE.value());
+                onSurfaceDestroyed();
+                break;
+            }
+            case SHOW_CONTROLLER_BAR: {
+                showMediaControllerBar(true);
+                break;
+            }
+            case HIDE_CONTROLLER_BAR: {
+                showMediaControllerBar(false);
                 break;
             }
             case UPDATE: {
-                if (mMediaPlayer != null) {
-                    if (mMediaPlayer.isPlaying()) {
-                        Message message1 = mMainHandler.obtainMessage(MessageType.UPDATE.value());
-                        Bundle bundle = new Bundle();
-                        bundle.putInt("position", mMediaPlayer.getCurrentPosition());
-                        message1.setData(bundle);
-                        message1.sendToTarget();
-                        mPlayerHandler.removeMessages(MessageType.UPDATE.value());
-                        mPlayerHandler.sendEmptyMessageDelayed(MessageType.UPDATE.value(), 500);
-                    }
-                }
+                update();
                 break;
             }
-            case UPDATE_VIDEO_SIZE: {
-                if (mMediaPlayer != null && mMediaPlayer.isPlaying()) {
-                    Message message1 = mMainHandler.obtainMessage(MessageType.UPDATE_VIDEO_SIZE.value());
-                    Bundle bundle = new Bundle();
-                    bundle.putInt("video-width", mMediaPlayer.getVideoWidth());
-                    bundle.putInt("video-height", mMediaPlayer.getVideoHeight());
-                    message1.setData(bundle);
-                    message1.sendToTarget();
-                }
+            case UPDATE_DISPLAY_REGION: {
+                updateDisplayRegion();
                 break;
             }
             default: {
@@ -666,24 +469,27 @@ public class PlaybackActivity extends Activity {
         }
     }
 
-    private void play(String path) {
-        if (path == null || path.isEmpty()) {
+    private void setDataSourceAndPrepare(String url) {
+        Log.d(TAG, "setDataSourceAndPrepare");
+        if (url == null || url.isEmpty()) {
             return;
         }
 
-        Log.d(TAG, path);
+        Log.d(TAG, url);
         /* stop playback first*/
+        MediaPlayer mediaPlayer = new MediaPlayer();
         stop();
 
-        mMediaPlayer = new MediaPlayer();
+        mMediaPlayer = mediaPlayer;
+        Log.d(TAG, "mediaPlayer:" + mediaPlayer.hashCode());
         mMediaPlayer.setOnPreparedListener(mMediaPlayerListener);
         mMediaPlayer.setOnCompletionListener(mMediaPlayerListener);
         mMediaPlayer.setOnSeekCompleteListener(mMediaPlayerListener);
         mMediaPlayer.setOnVideoSizeChangedListener(mMediaPlayerListener);
 
         try {
-            Log.e(TAG, "mMediaPlayer.setDataSource(" + path + ")");
-            mMediaPlayer.setDataSource(path);
+            Log.e(TAG, "mMediaPlayer.setDataSource(" + url + ")");
+            mMediaPlayer.setDataSource(url);
             if (mSurfaceValid) {
                 Log.e(TAG, "mMediaPlayer.setDisplay()");
                 mMediaPlayer.setDisplay(mSurfaceView.getHolder());
@@ -697,17 +503,226 @@ public class PlaybackActivity extends Activity {
             mMediaPlayer.release();
         }
 
-        mUrl = path;
+        mUrl = url;
+        mLastPosition = 0;
+    }
+
+    private void start() {
+        Log.d(TAG, "start");
+        if (mMediaPlayer != null && mState == PlayerState.PAUSED) {
+            try {
+                mMediaPlayer.start();
+                mPlayerHandler.sendEmptyMessage(MessageType.UPDATE.value());
+                changeState(PlayerState.PLAYING);
+                runOnUiThread(new Runnable() {
+                    @Override
+                    public void run() {
+                        mMediaControllerBar.setIsPlaying(true);
+                    }
+                });
+            } catch (Exception exception) {
+                Log.e(TAG, "exception:", exception);
+            }
+        } else if (mUrl != null && mState == PlayerState.IDLE) {
+            setDataSourceAndPrepare(mUrl);
+        }
+    }
+
+    private void pause() {
+        Log.d(TAG, "pause");
+        try {
+            if (mState == PlayerState.PLAYING && mMediaPlayer != null) {
+                mMediaPlayer.pause();
+                changeState(PlayerState.PAUSED);
+                runOnUiThread(new Runnable() {
+                    @Override
+                    public void run() {
+                        mMediaControllerBar.setIsPlaying(false);
+                    }
+                });
+            }
+        } catch (Exception exception) {
+            Log.e(TAG, "exception:", exception);
+        }
     }
 
     private void stop() {
+        Log.d(TAG, "stop");
+        if (mState == PlayerState.PLAYING || mState == PlayerState.PAUSED) {
+            mMediaPlayer.pause();
+            mLastPosition = mMediaPlayer.getCurrentPosition();
+            Log.d(TAG, "got last position:" + mLastPosition);
+        }
+
         if (mMediaPlayer != null) {
+            mMediaPlayer.setOnPreparedListener(null);
+            mMediaPlayer.setOnCompletionListener(null);
+            mMediaPlayer.setOnSeekCompleteListener(null);
+            mMediaPlayer.setOnVideoSizeChangedListener(null);
             mMediaPlayer.stop();
             mMediaPlayer.release();
             mMediaPlayer = null;
         }
 
         changeState(PlayerState.IDLE);
+        runOnUiThread(new Runnable() {
+            @Override
+            public void run() {
+                mMediaControllerBar.reset();
+            }
+        });
+
+        mPlayerHandler.removeMessages(MessageType.UPDATE.value());
+    }
+
+    private void seekTo(int position) {
+        Log.d(TAG, "seekTo:" + position);
+        try {
+            if (mMediaPlayer != null && (mState == PlayerState.PLAYING || mState == PlayerState.PAUSED)) {
+                mMediaPlayer.seekTo(position);
+            }
+        } catch (Exception exception) {
+            Log.e(TAG, "exception:", exception);
+        }
+    }
+
+    private int getCurrentPosition() {
+        if (mMediaPlayer != null) {
+            return mMediaPlayer.getCurrentPosition();
+        }
+
+        return 0;
+    }
+
+    private int getDuration() {
+        if (mMediaPlayer != null) {
+            return mMediaPlayer.getDuration();
+        }
+
+        return 0;
+    }
+
+    private void onPrepared(MediaPlayer mediaPlayer) {
+        Log.d(TAG, "onPrepared, player:" + mediaPlayer.hashCode());
+        if (mMediaPlayer != mediaPlayer) {
+            return;
+        }
+
+        try {
+            if (mLastPosition > 0 && mLastPosition < mMediaPlayer.getDuration()) {
+                Log.d(TAG, "seekTo last position:" + mLastPosition);
+                mMediaPlayer.seekTo(mLastPosition);
+            }
+
+            mMediaPlayer.start();
+        } catch (IllegalStateException ex) {
+            return;
+        }
+
+        changeState(PlayerState.PLAYING);
+        mPlayerHandler.sendEmptyMessage(MessageType.UPDATE.value());
+        updateDisplayRegion();
+
+        final int duration = mMediaPlayer.getDuration();
+        final int position = mMediaPlayer.getCurrentPosition();
+
+        runOnUiThread(new Runnable() {
+            @Override
+            public void run() {
+                mMediaControllerBar.setDuration(duration);
+                mMediaControllerBar.setCurrentPosition(position);
+                mMediaControllerBar.setIsPlaying(true);
+            }
+        });
+    }
+
+    private void onCompleted() {
+        Log.d(TAG, "onCompleted");
+        stop();
+        mLastPosition = 0;
+        Log.d(TAG, "reset last position:" + mLastPosition);
+    }
+
+    private void onSurfaceCreated() {
+        Log.d(TAG, "onSurfaceCreated");
+        mSurfaceValid = true;
+        if (mMediaPlayer != null) {
+            Log.e(TAG, "mMediaPlayer.setDisplay()");
+            mMediaPlayer.setDisplay(mSurfaceView.getHolder());
+            mMediaPlayer.setScreenOnWhilePlaying(true);
+        }
+    }
+
+    private void onSurfaceDestroyed() {
+        Log.d(TAG, "onSurfaceDestroyed");
+        mSurfaceValid = false;
+        if (mState == PlayerState.PLAYING) {
+            mMediaPlayer.pause();
+            mLastPosition = mMediaPlayer.getCurrentPosition();
+            Log.d(TAG, "got last position:" + mLastPosition);
+        }
+
+        stop();
+    }
+
+    private void showMediaControllerBar(final boolean show) {
+        Log.d(TAG, "showMediaControllerBar:" + show);
+        mPlayerHandler.removeMessages(MessageType.UPDATE.value());
+        mPlayerHandler.removeMessages(MessageType.HIDE_CONTROLLER_BAR.value());
+
+        if (show) {
+            mPlayerHandler.sendEmptyMessage(MessageType.UPDATE.value());
+            mPlayerHandler.sendEmptyMessageDelayed(MessageType.HIDE_CONTROLLER_BAR.value(), mMediaControllerBarVisibleTime);
+        }
+
+        runOnUiThread(new Runnable() {
+            @Override
+            public void run() {
+                if (show) {
+                    mMediaControllerBar.setVisibility(View.VISIBLE);
+                } else {
+                    mMediaControllerBar.setVisibility(View.GONE);
+                }
+            }
+        });
+    }
+
+    private void update() {
+        if (mMediaPlayer != null) {
+            if (mMediaPlayer.isPlaying()) {
+                final int position = mMediaPlayer.getCurrentPosition();
+                runOnUiThread(new Runnable() {
+                    @Override
+                    public void run() {
+                        mMediaControllerBar.setCurrentPosition(position);
+                    }
+                });
+                mPlayerHandler.removeMessages(MessageType.UPDATE.value());
+                mPlayerHandler.sendEmptyMessageDelayed(MessageType.UPDATE.value(), 500);
+            }
+        }
+    }
+
+    private void updateDisplayRegion() {
+        if (mMediaPlayer != null) {
+            updateDisplayRegion(mMediaPlayer.getVideoWidth(), mMediaPlayer.getVideoHeight());
+        }
+    }
+
+    private void updateDisplayRegion(final int width, final int height) {
+        Log.d(TAG, "updateDisplayRegion, width:" + width + ", height:" + height);
+        runOnUiThread(new Runnable() {
+            @Override
+            public void run() {
+                if (width <= 0 || height <= 0) {
+                    mSurfaceView.getHolder().setSizeFromLayout();
+                } else if (width * mDisplayLayout.getMeasuredHeight() > width * mDisplayLayout.getMeasuredWidth()) {
+                    mSurfaceView.getHolder().setFixedSize(mDisplayLayout.getMeasuredWidth(), mDisplayLayout.getMeasuredWidth() * height * 100 / width / 100);
+                } else {
+                    mSurfaceView.getHolder().setFixedSize(mDisplayLayout.getMeasuredHeight() * width * 100 / height / 100, mDisplayLayout.getMeasuredHeight());
+                }
+            }
+        });
     }
 
     private void changeState(PlayerState state) {

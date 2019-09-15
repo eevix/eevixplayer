@@ -10,9 +10,6 @@ import android.util.Log;
 
 import java.util.UUID;
 
-import static android.content.Intent.ACTION_VIEW;
-import static android.content.Intent.FLAG_ACTIVITY_NEW_TASK;
-
 public class DLNAMediaRender extends Service {
     private static final String TAG = "DLNAMediaRender";
     private static final int STATE_IDLE = PlaybackController.STATE_IDLE;
@@ -91,8 +88,8 @@ public class DLNAMediaRender extends Service {
         Log.d(TAG, "setDataSource url:" + url);
         if (mPlaybackController == null) {
             Log.d(TAG, "startActivity");
-            Intent intent = new Intent(ACTION_VIEW, Uri.parse(url), this, PlaybackActivity.class);
-            intent.setFlags(FLAG_ACTIVITY_NEW_TASK);
+            Intent intent = new Intent(Intent.ACTION_VIEW, Uri.parse(url), this, PlaybackActivity.class);
+            intent.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
             intent.putExtra("from", "DLNAMediaRender");
             startActivity(intent);
         } else {

@@ -48,6 +48,10 @@ public class MediaControllerBar extends LinearLayout implements SeekBar.OnSeekBa
 
     @UiThread
     void reset() {
+        Log.d(TAG, "reset");
+        if (!isAttachedToWindow()) {
+            return;
+        }
         mPlayButton.setImageDrawable(ContextCompat.getDrawable(getContext(), android.R.drawable.ic_media_play));
         mDurationView.setText(R.string.NoTime);
         mPositionView.setText(R.string.NoTime);
@@ -59,6 +63,9 @@ public class MediaControllerBar extends LinearLayout implements SeekBar.OnSeekBa
     @UiThread
     void setDuration(int duration) {
         Log.d(TAG, "setDuration:" + duration + "ms");
+        if (!isAttachedToWindow()) {
+            return;
+        }
         if (duration > 0) {
             mDurationView.setText(millisecondsToTime(duration));
             mSeekBar.setMax(duration);
@@ -70,6 +77,9 @@ public class MediaControllerBar extends LinearLayout implements SeekBar.OnSeekBa
 
     @UiThread
     void setCurrentPosition(int position) {
+        if (!isAttachedToWindow()) {
+            return;
+        }
         if (!mIsTouchingSeekBar) {
             mSeekBar.setProgress(position);
         }
@@ -78,6 +88,9 @@ public class MediaControllerBar extends LinearLayout implements SeekBar.OnSeekBa
     @UiThread
     void setIsPlaying(boolean isPlaying) {
         Log.d(TAG, "setIsPlaying:" + isPlaying);
+        if (!isAttachedToWindow()) {
+            return;
+        }
         mIsPlaying = isPlaying;
 
         if (mIsPlaying) {
@@ -119,6 +132,7 @@ public class MediaControllerBar extends LinearLayout implements SeekBar.OnSeekBa
     }
 
     private void initViews() {
+        Log.d(TAG, "initViews");
         mPositionView = findViewById(R.id.position);
         mDurationView = findViewById(R.id.duration);
         mSeekBar = findViewById(R.id.seekBar);
